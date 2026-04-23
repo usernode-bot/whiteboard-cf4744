@@ -1,33 +1,32 @@
 const express = require('express');
+const http = require('http');
 const path = require('path');
 const { Pool } = require('pg');
 const jwt = require('jsonwebtoken');
+const { Server } = require('socket.io');
 
 const app = express();
+const server = http.createServer(app);
+const io = new Server(server, {
+  cors: { origin: '*', methods: ['GET', 'POST'] },
+  pingTimeout: 30000,
+  pingInterval: 10000,
+});
 const port = process.env.PORT || 3000;
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const JWT_SECRET = process.env.JWT_SECRET;
 
-// Paths that stay open without authentication. Add a path here (and add it
-// with `app.get`/`app.post` below) if you deliberately want it public.
-// Everything else requires a valid platform-issued JWT.
 const PUBLIC_API_PATHS = new Set(['/health']);
 
 app.use(express.json());
 
-// Verify platform-issued JWT if one was passed, then enforce auth on
-// anything not explicitly marked public. The iframe adds `?token=…`
-// on load; the frontend script forwards the token via `x-usernode-token`
-// on subsequent fetches.
+// JWT auth middleware for HTTP
 app.use((req, res, next) => {
   const token = req.query.token || req.headers['x-usernode-token'];
   if (token && JWT_SECRET) {
     try { req.user = jwt.verify(token, JWT_SECRET); } catch {}
   }
 
-  // Static assets (CSS/JS/images) are always served; the API and the HTML
-  // shell are gated so direct hits to the staging/prod subdomain don't
-  // leak app data to the public internet.
   if (req.method !== 'GET' || req.path.startsWith('/api/')) {
     if (PUBLIC_API_PATHS.has(req.path)) return next();
     if (!req.user) return res.status(401).json({ error: 'Not authenticated' });
@@ -35,40 +34,127 @@ app.use((req, res, next) => {
   next();
 });
 
+// JWT auth middleware for Socket.IO
+io.use((socket, next) => {
+  const token = socket.handshake.auth.token;
+  if (token && JWT_SECRET) {
+    try {
+      socket.user = jwt.verify(token, JWT_SECRET);
+      return next();
+    } catch {}
+  }
+  next(new Error('Not authenticated'));
+});
+
+// Track connected users: socketId -> { id, username, color, cursor }
+const connectedUsers = new Map();
+
+// Assign a color to each user based on a palette
+const USER_COLORS = [
+  '#f472b6', '#a78bfa', '#60a5fa', '#34d399', '#fbbf24',
+  '#fb923c', '#f87171', '#e879f9', '#22d3ee', '#a3e635',
+];
+let colorIndex = 0;
+
 app.get('/health', (_req, res) => res.json({ status: 'ok' }));
 
-// Button press
-app.post('/api/press', async (req, res) => {
+// Get all strokes for initial canvas load
+app.get('/api/strokes', async (req, res) => {
   try {
-    await pool.query(`
-      INSERT INTO presses (user_id, username) VALUES ($1, $2)
-    `, [req.user.id, req.user.username]);
+    const { rows } = await pool.query(
+      `SELECT id, user_id, username, color, width, points, tool
+       FROM strokes ORDER BY id ASC`
+    );
+    // Parse points from JSON string
+    const strokes = rows.map(r => ({
+      ...r,
+      points: typeof r.points === 'string' ? JSON.parse(r.points) : r.points,
+    }));
+    res.json({ strokes });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Clear all strokes
+app.post('/api/clear', async (req, res) => {
+  try {
+    await pool.query('DELETE FROM strokes');
+    io.emit('board-cleared');
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// Leaderboard
-app.get('/api/leaderboard', async (_req, res) => {
-  try {
-    const { rows } = await pool.query(`
-      SELECT username, COUNT(*) as presses
-      FROM presses
-      GROUP BY username
-      ORDER BY presses DESC
-      LIMIT 50
-    `);
-    res.json({ leaderboard: rows });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+// Socket.IO connection handling
+io.on('connection', (socket) => {
+  const user = socket.user;
+  const userColor = USER_COLORS[colorIndex % USER_COLORS.length];
+  colorIndex++;
+
+  connectedUsers.set(socket.id, {
+    id: user.id,
+    username: user.username,
+    color: userColor,
+  });
+
+  // Broadcast updated user list
+  io.emit('users-updated', Array.from(connectedUsers.values()));
+
+  // Handle drawing - receive stroke segments and broadcast to others
+  socket.on('draw-start', (data) => {
+    socket.broadcast.emit('draw-start', {
+      socketId: socket.id,
+      username: user.username,
+      ...data,
+    });
+  });
+
+  socket.on('draw-move', (data) => {
+    socket.broadcast.emit('draw-move', {
+      socketId: socket.id,
+      ...data,
+    });
+  });
+
+  socket.on('draw-end', async (data) => {
+    socket.broadcast.emit('draw-end', { socketId: socket.id });
+
+    // Persist the completed stroke
+    if (data && data.points && data.points.length > 0) {
+      try {
+        await pool.query(
+          `INSERT INTO strokes (user_id, username, color, width, points, tool)
+           VALUES ($1, $2, $3, $4, $5, $6)`,
+          [user.id, user.username, data.color, data.width, JSON.stringify(data.points), data.tool || 'pen']
+        );
+      } catch (err) {
+        console.error('Failed to save stroke:', err.message);
+      }
+    }
+  });
+
+  // Cursor position updates
+  socket.on('cursor-move', (data) => {
+    socket.broadcast.emit('cursor-move', {
+      socketId: socket.id,
+      username: user.username,
+      color: userColor,
+      x: data.x,
+      y: data.y,
+    });
+  });
+
+  socket.on('disconnect', () => {
+    connectedUsers.delete(socket.id);
+    io.emit('users-updated', Array.from(connectedUsers.values()));
+    socket.broadcast.emit('cursor-remove', { socketId: socket.id });
+  });
 });
 
 app.use(express.static(path.join(__dirname, 'public')));
 
-// HTML shell: serve the app if authenticated, otherwise an "open in Usernode"
-// landing page so stray visits to the staging URL don't reveal the app.
 app.get('*', (req, res) => {
   if (!req.user) {
     return res.status(401).send(`<!doctype html><meta charset=utf-8><title>Open in Usernode</title>
@@ -92,7 +178,21 @@ async function start() {
       created_at TIMESTAMPTZ DEFAULT NOW()
     )
   `);
-  app.listen(port, () => console.log(`Listening on :${port}`));
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS strokes (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL,
+      username VARCHAR(255) NOT NULL,
+      color VARCHAR(32) NOT NULL DEFAULT '#000000',
+      width REAL NOT NULL DEFAULT 3,
+      points JSONB NOT NULL,
+      tool VARCHAR(32) NOT NULL DEFAULT 'pen',
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+
+  server.listen(port, () => console.log(`Listening on :${port}`));
 }
 
 start().catch(err => { console.error(err); process.exit(1); });

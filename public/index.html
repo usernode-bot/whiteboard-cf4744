@@ -233,12 +233,20 @@
       position: fixed; top: 12px; left: 12px; z-index: 50;
       font-size: 14px; font-weight: 600; color: #a1a1aa;
       letter-spacing: 0.02em;
+      display: flex; align-items: center; gap: 6px;
     }
+    #connection-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: #f87171;
+      flex-shrink: 0;
+      transition: background 0.3s;
+    }
+    #connection-dot.connected { background: #34d399; }
   </style>
 </head>
 <body class="bg-white">
 
-  <div id="title-bar">whiteboard</div>
+  <div id="title-bar"><span id="connection-dot"></span>whiteboard</div>
 
   <div id="users-bar"></div>
 
@@ -297,7 +305,32 @@
     const headers = token ? { 'x-usernode-token': token } : {};
 
     // ---- Socket.IO ----
-    const socket = io({ auth: { token } });
+    const socket = io({
+      auth: { token },
+      reconnection: true,
+      reconnectionAttempts: Infinity,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+      transports: ['websocket', 'polling'],
+    });
+
+    const connectionDot = document.getElementById('connection-dot');
+
+    socket.on('connect', () => {
+      console.log('Socket connected:', socket.id);
+      if (connectionDot) connectionDot.classList.add('connected');
+      loadStrokes();
+    });
+
+    socket.on('disconnect', (reason) => {
+      console.log('Socket disconnected:', reason);
+      if (connectionDot) connectionDot.classList.remove('connected');
+    });
+
+    socket.on('connect_error', (err) => {
+      console.error('Socket connection error:', err.message);
+      if (connectionDot) connectionDot.classList.remove('connected');
+    });
 
     // ---- Canvas setup ----
     const canvas = document.getElementById('whiteboard');
@@ -508,7 +541,6 @@
         console.error('Failed to load strokes:', err);
       }
     }
-    loadStrokes();
 
     // ---- Socket.IO event handlers ----
 

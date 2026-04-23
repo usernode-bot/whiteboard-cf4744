@@ -62,7 +62,7 @@ app.get('/health', (_req, res) => res.json({ status: 'ok' }));
 app.get('/api/strokes', async (req, res) => {
   try {
     const { rows } = await pool.query(
-      `SELECT id, user_id, username, color, width, points, tool
+      `SELECT id, user_id, username, color, width, points, tool, emoji
        FROM strokes ORDER BY id ASC`
     );
     // Parse points from JSON string
@@ -146,6 +146,20 @@ io.on('connection', (socket) => {
     });
   });
 
+  socket.on('emoji-place', async (data) => {
+    socket.broadcast.emit('emoji-place', { socketId: socket.id, ...data });
+    try {
+      await pool.query(
+        `INSERT INTO strokes (user_id, username, color, width, points, tool, emoji)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [user.id, user.username, '#000000', data.size || 36,
+         JSON.stringify([{ x: data.x, y: data.y }]), 'emoji', data.emoji]
+      );
+    } catch (err) {
+      console.error('Failed to save emoji stamp:', err.message);
+    }
+  });
+
   socket.on('disconnect', () => {
     connectedUsers.delete(socket.id);
     io.emit('users-updated', Array.from(connectedUsers.values()));
@@ -191,6 +205,7 @@ async function start() {
       created_at TIMESTAMPTZ DEFAULT NOW()
     )
   `);
+  await pool.query(`ALTER TABLE strokes ADD COLUMN IF NOT EXISTS emoji TEXT`);
 
   server.listen(port, () => console.log(`Listening on :${port}`));
 }

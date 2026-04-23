@@ -524,7 +524,7 @@
     function placeStamp(sx, sy) {
       if (!currentEmoji) return;
       const { x, y } = screenToWorld(sx, sy);
-      const stamp = { x, y, emoji: currentEmoji, size: brushSize };
+      const stamp = { x, y, emoji: currentEmoji, size: brushSize * 5 };
       allStamps.push(stamp);
       redrawAll();
       socket.emit('emoji-place', stamp);
@@ -534,7 +534,7 @@
       emojiGhost.style.display = 'block';
       emojiGhost.style.left = sx + 'px';
       emojiGhost.style.top = sy + 'px';
-      emojiGhost.style.fontSize = brushSize + 'px';
+      emojiGhost.style.fontSize = (brushSize * 5) + 'px';
     }
 
     // ---- Drawing ----

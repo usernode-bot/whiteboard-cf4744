@@ -76,10 +76,9 @@
       background: #ffffff;
     }
 
-    /* Canvas fills the entire viewport via inset-0; pixel buffer sized in JS */
     #whiteboard {
       display: block; position: fixed;
-      top: 0; left: 0; right: 0; bottom: 0;
+      top: 0; left: 0;
       touch-action: none;
       cursor: crosshair;
     }
@@ -338,11 +337,14 @@
     }
 
     // ---- Canvas sizing ----
-    // CSS (top/right/bottom/left:0) controls visual size; JS only sets pixel buffer for DPR.
     function setupCanvas() {
       const dpr = window.devicePixelRatio || 1;
-      canvas.width  = Math.round(canvas.offsetWidth  * dpr);
-      canvas.height = Math.round(canvas.offsetHeight * dpr);
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      canvas.style.width  = w + 'px';
+      canvas.style.height = h + 'px';
+      canvas.width  = Math.round(w * dpr);
+      canvas.height = Math.round(h * dpr);
       applyViewTransform();
     }
     setupCanvas();

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 
   <script>
   // usernode-dev-console@1
@@ -69,11 +69,27 @@
   <script src="/socket.io/socket.io.js"></script>
   <style>
     * { box-sizing: border-box; }
-    body { margin: 0; overflow: hidden; touch-action: none; background: #ffffff; }
+    html { height: 100%; overflow: hidden; }
+    body {
+      margin: 0;
+      width: 100%; height: 100%;
+      overflow: hidden;
+      /* position:fixed prevents iOS rubber-band scroll behind the canvas */
+      position: fixed;
+      background: #ffffff;
+    }
+
+    /* Canvas fills the full viewport, fixed so it never affects document flow */
+    #whiteboard {
+      display: block;
+      position: fixed;
+      top: 0; left: 0;
+      touch-action: none;
+    }
 
     #toolbar {
       position: fixed;
-      bottom: max(16px, env(safe-area-inset-bottom));
+      bottom: max(12px, env(safe-area-inset-bottom));
       left: 50%;
       transform: translateX(-50%);
       z-index: 50;
@@ -86,11 +102,12 @@
       border: 1px solid rgba(228, 228, 231, 0.8);
       border-radius: 14px;
       box-shadow: 0 4px 24px rgba(0,0,0,0.1);
-      /* Mobile: scroll if it overflows the screen width */
-      max-width: calc(100vw - 24px);
+      max-width: calc(100vw - 16px);
       overflow-x: auto;
       overflow-y: visible;
+      /* pan-x lets the toolbar scroll horizontally on touch */
       touch-action: pan-x;
+      -webkit-overflow-scrolling: touch;
       scrollbar-width: none;
       -ms-overflow-style: none;
     }
@@ -129,7 +146,6 @@
       width: 80px; height: 4px; border-radius: 2px;
       background: #d4d4d8; outline: none;
       flex-shrink: 0;
-      /* Allow touch dragging on the slider itself */
       touch-action: none;
     }
     #brush-size-slider::-webkit-slider-thumb {
@@ -150,6 +166,35 @@
       font-size: 11px; color: #a1a1aa;
       min-width: 22px; text-align: center;
       font-variant-numeric: tabular-nums;
+    }
+
+    /* Compact toolbar on small phones */
+    @media (max-width: 480px) {
+      #toolbar {
+        gap: 5px;
+        padding: 6px 10px;
+        bottom: max(8px, env(safe-area-inset-bottom));
+      }
+      #toolbar button {
+        width: 38px; height: 38px;
+      }
+      #brush-size-slider {
+        width: 60px;
+      }
+      #size-label {
+        min-width: 18px;
+        font-size: 10px;
+      }
+      .swatch {
+        width: 20px !important;
+        height: 20px !important;
+      }
+      #color-picker-wrapper {
+        width: 28px; height: 28px;
+      }
+      #color-picker-wrapper input {
+        width: 36px; height: 36px;
+      }
     }
 
     #users-bar {

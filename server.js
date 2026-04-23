@@ -180,7 +180,7 @@ async function start() {
       id SERIAL PRIMARY KEY,
       user_id INTEGER NOT NULL,
       username VARCHAR(255) NOT NULL,
-      color VARCHAR(32) NOT NULL DEFAULT '#ffffff',
+      color VARCHAR(32) NOT NULL DEFAULT '#000000',
       width REAL NOT NULL DEFAULT 3,
       points JSONB NOT NULL,
       tool VARCHAR(32) NOT NULL DEFAULT 'pen',

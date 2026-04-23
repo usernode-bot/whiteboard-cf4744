@@ -73,7 +73,7 @@
 
     #toolbar {
       position: fixed;
-      bottom: 16px;
+      bottom: max(16px, env(safe-area-inset-bottom));
       left: 50%;
       transform: translateX(-50%);
       z-index: 50;
@@ -86,10 +86,19 @@
       border: 1px solid rgba(228, 228, 231, 0.8);
       border-radius: 14px;
       box-shadow: 0 4px 24px rgba(0,0,0,0.1);
+      /* Mobile: scroll if it overflows the screen width */
+      max-width: calc(100vw - 24px);
+      overflow-x: auto;
+      overflow-y: visible;
+      touch-action: pan-x;
+      scrollbar-width: none;
+      -ms-overflow-style: none;
     }
+    #toolbar::-webkit-scrollbar { display: none; }
 
     #toolbar button {
-      width: 36px; height: 36px;
+      width: 44px; height: 44px;
+      flex-shrink: 0;
       border: none; border-radius: 8px;
       cursor: pointer; display: flex;
       align-items: center; justify-content: center;
@@ -100,17 +109,18 @@
     #toolbar button:hover { background: rgba(228,228,231,0.6); color: #27272a; }
     #toolbar button.active { background: #7c3aed; color: white; }
 
-    .separator { width: 1px; height: 24px; background: rgba(228,228,231,0.8); }
+    .separator { width: 1px; height: 28px; flex-shrink: 0; background: rgba(228,228,231,0.8); }
 
     #color-picker-wrapper {
-      position: relative; width: 28px; height: 28px;
+      position: relative; width: 32px; height: 32px;
+      flex-shrink: 0;
       border-radius: 50%; overflow: hidden;
       border: 2px solid rgba(161,161,170,0.4);
       cursor: pointer;
     }
     #color-picker-wrapper input {
       position: absolute; top: -4px; left: -4px;
-      width: 36px; height: 36px;
+      width: 40px; height: 40px;
       border: none; padding: 0; cursor: pointer;
     }
 
@@ -118,16 +128,19 @@
       -webkit-appearance: none; appearance: none;
       width: 80px; height: 4px; border-radius: 2px;
       background: #d4d4d8; outline: none;
+      flex-shrink: 0;
+      /* Allow touch dragging on the slider itself */
+      touch-action: none;
     }
     #brush-size-slider::-webkit-slider-thumb {
       -webkit-appearance: none; appearance: none;
-      width: 16px; height: 16px; border-radius: 50%;
+      width: 22px; height: 22px; border-radius: 50%;
       background: #7c3aed; cursor: pointer;
       border: 2px solid #ffffff;
       box-shadow: 0 1px 3px rgba(0,0,0,0.15);
     }
     #brush-size-slider::-moz-range-thumb {
-      width: 16px; height: 16px; border-radius: 50%;
+      width: 22px; height: 22px; border-radius: 50%;
       background: #7c3aed; cursor: pointer;
       border: 2px solid #ffffff;
       box-shadow: 0 1px 3px rgba(0,0,0,0.15);
@@ -208,13 +221,13 @@
     </div>
 
     <!-- Quick color swatches -->
-    <div style="display:flex; gap:3px;">
-      <div class="swatch" data-color="#18181b" style="width:18px;height:18px;border-radius:50%;background:#18181b;cursor:pointer;border:2px solid transparent;"></div>
-      <div class="swatch" data-color="#f87171" style="width:18px;height:18px;border-radius:50%;background:#f87171;cursor:pointer;border:2px solid transparent;"></div>
-      <div class="swatch" data-color="#fbbf24" style="width:18px;height:18px;border-radius:50%;background:#fbbf24;cursor:pointer;border:2px solid transparent;"></div>
-      <div class="swatch" data-color="#34d399" style="width:18px;height:18px;border-radius:50%;background:#34d399;cursor:pointer;border:2px solid transparent;"></div>
-      <div class="swatch" data-color="#60a5fa" style="width:18px;height:18px;border-radius:50%;background:#60a5fa;cursor:pointer;border:2px solid transparent;"></div>
-      <div class="swatch" data-color="#a78bfa" style="width:18px;height:18px;border-radius:50%;background:#a78bfa;cursor:pointer;border:2px solid transparent;"></div>
+    <div style="display:flex; gap:5px; flex-shrink:0;">
+      <div class="swatch" data-color="#18181b" style="width:24px;height:24px;border-radius:50%;background:#18181b;cursor:pointer;border:2px solid transparent;"></div>
+      <div class="swatch" data-color="#f87171" style="width:24px;height:24px;border-radius:50%;background:#f87171;cursor:pointer;border:2px solid transparent;"></div>
+      <div class="swatch" data-color="#fbbf24" style="width:24px;height:24px;border-radius:50%;background:#fbbf24;cursor:pointer;border:2px solid transparent;"></div>
+      <div class="swatch" data-color="#34d399" style="width:24px;height:24px;border-radius:50%;background:#34d399;cursor:pointer;border:2px solid transparent;"></div>
+      <div class="swatch" data-color="#60a5fa" style="width:24px;height:24px;border-radius:50%;background:#60a5fa;cursor:pointer;border:2px solid transparent;"></div>
+      <div class="swatch" data-color="#a78bfa" style="width:24px;height:24px;border-radius:50%;background:#a78bfa;cursor:pointer;border:2px solid transparent;"></div>
     </div>
 
     <div class="separator"></div>
@@ -245,21 +258,21 @@
     const canvas = document.getElementById('whiteboard');
     const ctx = canvas.getContext('2d');
 
-    function resizeCanvas() {
-      const data = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
-      ctx.putImageData(data, 0, 0);
+    function setupCanvas() {
+      const dpr = window.devicePixelRatio || 1;
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      canvas.style.width = w + 'px';
+      canvas.style.height = h + 'px';
+      canvas.width = Math.round(w * dpr);
+      canvas.height = Math.round(h * dpr);
+      ctx.scale(dpr, dpr);
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
     }
-    resizeCanvas();
+    setupCanvas();
     window.addEventListener('resize', () => {
-      // Full redraw on resize
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
+      setupCanvas();
       redrawAll();
     });
 
@@ -332,13 +345,6 @@
     });
 
     // ---- Drawing ----
-    function getPos(e) {
-      if (e.touches && e.touches.length > 0) {
-        return { x: e.touches[0].clientX, y: e.touches[0].clientY };
-      }
-      return { x: e.clientX, y: e.clientY };
-    }
-
     function drawSegment(x1, y1, x2, y2, color, width, tool) {
       ctx.beginPath();
       if (tool === 'eraser') {
@@ -355,67 +361,80 @@
       ctx.globalCompositeOperation = 'source-over';
     }
 
-    function startDrawing(e) {
-      e.preventDefault();
+    function beginStroke(x, y) {
       isDrawing = true;
-      const pos = getPos(e);
-      lastX = pos.x;
-      lastY = pos.y;
-      currentStrokePoints = [{ x: pos.x, y: pos.y }];
-
-      socket.emit('draw-start', {
-        x: pos.x, y: pos.y,
-        color: currentColor,
-        width: brushSize,
-        tool: currentTool,
-      });
+      lastX = x; lastY = y;
+      currentStrokePoints = [{ x, y }];
+      socket.emit('draw-start', { x, y, color: currentColor, width: brushSize, tool: currentTool });
     }
 
-    function draw(e) {
-      e.preventDefault();
-      const pos = getPos(e);
-
-      // Send cursor position
-      socket.emit('cursor-move', { x: pos.x, y: pos.y });
-
+    function continueStroke(x, y) {
       if (!isDrawing) return;
-
-      drawSegment(lastX, lastY, pos.x, pos.y, currentColor, brushSize, currentTool);
-      currentStrokePoints.push({ x: pos.x, y: pos.y });
-      lastX = pos.x;
-      lastY = pos.y;
-
-      socket.emit('draw-move', { x: pos.x, y: pos.y });
+      drawSegment(lastX, lastY, x, y, currentColor, brushSize, currentTool);
+      currentStrokePoints.push({ x, y });
+      lastX = x; lastY = y;
+      socket.emit('draw-move', { x, y });
     }
 
-    function stopDrawing(e) {
+    function endStroke() {
       if (!isDrawing) return;
       isDrawing = false;
-
-      // Save locally and send to server
       if (currentStrokePoints.length > 0) {
-        const stroke = {
-          color: currentColor,
-          width: brushSize,
-          points: currentStrokePoints,
-          tool: currentTool,
-        };
+        const stroke = { color: currentColor, width: brushSize, points: currentStrokePoints, tool: currentTool };
         allStrokes.push(stroke);
-
         socket.emit('draw-end', stroke);
       }
       currentStrokePoints = [];
     }
 
-    canvas.addEventListener('mousedown', startDrawing);
-    canvas.addEventListener('mousemove', draw);
-    canvas.addEventListener('mouseup', stopDrawing);
-    canvas.addEventListener('mouseleave', stopDrawing);
-    canvas.addEventListener('touchstart', startDrawing, { passive: false });
-    canvas.addEventListener('touchmove', draw, { passive: false });
-    canvas.addEventListener('touchend', stopDrawing);
-    canvas.addEventListener('touchcancel', stopDrawing);
+    // Mouse events (also emit cursor position)
+    canvas.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      beginStroke(e.clientX, e.clientY);
+    });
+    canvas.addEventListener('mousemove', (e) => {
+      socket.emit('cursor-move', { x: e.clientX, y: e.clientY });
+      continueStroke(e.clientX, e.clientY);
+    });
+    canvas.addEventListener('mouseup', endStroke);
+    canvas.addEventListener('mouseleave', endStroke);
+
+    // Touch events — only track first touch, no cursor emits on mobile
+    let activeTouchId = null;
+    canvas.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      if (activeTouchId !== null) return; // ignore extra fingers
+      const t = e.changedTouches[0];
+      activeTouchId = t.identifier;
+      beginStroke(t.clientX, t.clientY);
+    }, { passive: false });
+    canvas.addEventListener('touchmove', (e) => {
+      e.preventDefault();
+      for (const t of e.changedTouches) {
+        if (t.identifier === activeTouchId) {
+          continueStroke(t.clientX, t.clientY);
+          break;
+        }
+      }
+    }, { passive: false });
+    canvas.addEventListener('touchend', (e) => {
+      for (const t of e.changedTouches) {
+        if (t.identifier === activeTouchId) {
+          activeTouchId = null;
+          endStroke();
+          break;
+        }
+      }
+    });
+    canvas.addEventListener('touchcancel', () => {
+      activeTouchId = null;
+      endStroke();
+    });
     canvas.style.cursor = 'crosshair';
+
+    // Touch support for the brush size slider (touch-action:none needs manual handling)
+    sizeSlider.addEventListener('touchstart', (e) => { e.stopPropagation(); }, { passive: true });
+    sizeSlider.addEventListener('touchmove', (e) => { e.stopPropagation(); }, { passive: true });
 
     // ---- Redraw all strokes ----
     function redrawAll() {

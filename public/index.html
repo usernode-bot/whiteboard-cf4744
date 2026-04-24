@@ -214,29 +214,21 @@
     }
     #zoom-label.visible { opacity: 1; }
 
-    #whiteboard.tool-select { cursor: crosshair; }
-
-    #evolve-btn {
-      position: fixed;
-      bottom: max(80px, calc(env(safe-area-inset-bottom) + 68px));
-      left: 50%; transform: translateX(-50%);
-      z-index: 52;
-      display: none; align-items: center; gap: 8px;
-      padding: 10px 22px;
-      background: linear-gradient(135deg, #7c3aed 0%, #ec4899 100%);
-      color: white; font-weight: 700; font-size: 15px;
-      border: none; border-radius: 14px; cursor: pointer;
-      box-shadow: 0 4px 24px rgba(124,58,237,0.45);
-      transition: transform 0.15s, box-shadow 0.15s;
-      letter-spacing: 0.02em; white-space: nowrap;
-      font-family: inherit;
+    #whiteboard.tool-evolve { cursor: none; }
+    #evolve-ghost {
+      position: fixed; pointer-events: none; z-index: 45;
+      border: 2.5px dashed rgba(124,58,237,0.8);
+      border-radius: 50%;
+      background: rgba(124,58,237,0.07);
+      transform: translate(-50%, -50%);
+      display: none;
+      transition: background 0.12s, border-color 0.12s;
     }
-    #evolve-btn.visible { display: flex; }
-    #evolve-btn:hover {
-      transform: translateX(-50%) scale(1.06);
-      box-shadow: 0 6px 32px rgba(124,58,237,0.6);
+    #evolve-ghost.stamping {
+      background: rgba(124,58,237,0.22);
+      border-style: solid;
+      border-color: rgba(124,58,237,1);
     }
-    #evolve-btn:active { transform: translateX(-50%) scale(0.97); }
 
     #whiteboard.tool-emoji { cursor: none; }
     #emoji-ghost {
@@ -283,7 +275,7 @@
 
   <div id="emoji-picker-panel"></div>
   <div id="emoji-ghost"></div>
-  <button id="evolve-btn">✨ Evolve</button>
+  <div id="evolve-ghost"></div>
   <canvas id="whiteboard"></canvas>
 
   <div id="toolbar">
@@ -308,11 +300,8 @@
     <button id="tool-emoji" title="Emoji Stamp (M)">
       <span style="font-size:20px;line-height:1">😀</span>
     </button>
-    <button id="tool-select" title="Select (S)">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <rect x="3" y="3" width="18" height="18" rx="2" stroke-dasharray="4 2.5"/>
-        <line x1="9" y1="3" x2="9" y2="3"/>
-      </svg>
+    <button id="tool-evolve" title="Evolve Stamp (V)">
+      <span style="font-size:18px;line-height:1">✨</span>
     </button>
 
     <div class="separator"></div>
@@ -423,7 +412,7 @@
     window.addEventListener('resize', () => { setupCanvas(); redrawAll(); });
 
     // ---- App state ----
-    let currentTool = 'pen'; // 'pen' | 'eraser' | 'pan' | 'emoji' | 'select'
+    let currentTool = 'pen'; // 'pen' | 'eraser' | 'pan' | 'emoji' | 'evolve'
     let currentColor = '#000000';
     let brushSize = 3;
     let isDrawing = false;
@@ -431,13 +420,6 @@
     let currentStrokePoints = [];
     let allStrokes = [];
     let allStamps = [];
-
-    // ---- Selection state ----
-    let isSelecting = false;
-    let selStartW = null;       // { x, y } world coords where drag started
-    let selectionRect = null;   // { x1, y1, x2, y2 } world coords
-    let selectedStrokes = new Set(); // indices into allStrokes
-    let selectedStamps  = new Set(); // indices into allStamps
 
     const EMOJI_LIST = ['😀','😂','😍','🤔','😎','👍','👋','🙏','❤️','🔥','⭐','🎉','💡','✅','❌','🚀','🎨','💯','🎯','🌟','🐱','🌈','🍕','🦄','🏆','💎','🌺','🍦','🐶','🎵'];
     let currentEmoji = '😀';
@@ -447,31 +429,31 @@
     const remoteCursorWorld = new Map(); // socketId -> { x, y } in world coords
 
     // ---- Toolbar ----
-    const penBtn       = document.getElementById('tool-pen');
-    const eraserBtn    = document.getElementById('tool-eraser');
-    const panBtn       = document.getElementById('tool-pan');
-    const emojiBtn     = document.getElementById('tool-emoji');
-    const selectBtn    = document.getElementById('tool-select');
-    const emojiPanel   = document.getElementById('emoji-picker-panel');
-    const emojiGhost   = document.getElementById('emoji-ghost');
-    const colorPicker  = document.getElementById('color-picker');
-    const sizeSlider   = document.getElementById('brush-size-slider');
-    const sizeLabel    = document.getElementById('size-label');
-    const clearBtn     = document.getElementById('btn-clear');
-    const resetViewBtn = document.getElementById('btn-reset-view');
-    const swatches     = document.querySelectorAll('.swatch');
-    const evolveBtn    = document.getElementById('evolve-btn');
+    const penBtn         = document.getElementById('tool-pen');
+    const eraserBtn      = document.getElementById('tool-eraser');
+    const panBtn         = document.getElementById('tool-pan');
+    const emojiBtn       = document.getElementById('tool-emoji');
+    const evolveStampBtn = document.getElementById('tool-evolve');
+    const emojiPanel     = document.getElementById('emoji-picker-panel');
+    const emojiGhost     = document.getElementById('emoji-ghost');
+    const evolveGhost    = document.getElementById('evolve-ghost');
+    const colorPicker    = document.getElementById('color-picker');
+    const sizeSlider     = document.getElementById('brush-size-slider');
+    const sizeLabel      = document.getElementById('size-label');
+    const clearBtn       = document.getElementById('btn-clear');
+    const resetViewBtn   = document.getElementById('btn-reset-view');
+    const swatches       = document.querySelectorAll('.swatch');
 
     function setTool(t) {
       currentTool = t;
-      penBtn.classList.toggle('active',     t === 'pen');
-      eraserBtn.classList.toggle('active',  t === 'eraser');
-      panBtn.classList.toggle('active',     t === 'pan');
-      emojiBtn.classList.toggle('active',   t === 'emoji');
-      selectBtn.classList.toggle('active',  t === 'select');
+      penBtn.classList.toggle('active',         t === 'pen');
+      eraserBtn.classList.toggle('active',      t === 'eraser');
+      panBtn.classList.toggle('active',         t === 'pan');
+      emojiBtn.classList.toggle('active',       t === 'emoji');
+      evolveStampBtn.classList.toggle('active', t === 'evolve');
       canvas.classList.toggle('tool-pan',    t === 'pan');
       canvas.classList.toggle('tool-emoji',  t === 'emoji');
-      canvas.classList.toggle('tool-select', t === 'select');
+      canvas.classList.toggle('tool-evolve', t === 'evolve');
       canvas.classList.remove('grabbing');
       if (t !== 'emoji') {
         emojiPanel.classList.remove('open');
@@ -479,11 +461,12 @@
       } else {
         emojiGhost.textContent = currentEmoji;
       }
+      if (t !== 'evolve') evolveGhost.style.display = 'none';
     }
-    penBtn.addEventListener('click',    () => setTool('pen'));
-    eraserBtn.addEventListener('click', () => setTool('eraser'));
-    panBtn.addEventListener('click',    () => setTool('pan'));
-    selectBtn.addEventListener('click', () => setTool('select'));
+    penBtn.addEventListener('click',         () => setTool('pen'));
+    eraserBtn.addEventListener('click',      () => setTool('eraser'));
+    panBtn.addEventListener('click',         () => setTool('pan'));
+    evolveStampBtn.addEventListener('click', () => setTool('evolve'));
 
     // Populate emoji picker
     EMOJI_LIST.forEach(emoji => {
@@ -623,89 +606,59 @@
     }
     function cancelStroke() { isDrawing = false; currentStrokePoints = []; }
 
-    // ---- Selection helpers ----
-    function pointInRect(px, py, rx1, ry1, rx2, ry2) {
-      const minX = Math.min(rx1, rx2), maxX = Math.max(rx1, rx2);
-      const minY = Math.min(ry1, ry2), maxY = Math.max(ry1, ry2);
-      return px >= minX && px <= maxX && py >= minY && py <= maxY;
-    }
-
-    function strokeIntersectsRect(stroke, rx1, ry1, rx2, ry2) {
-      for (const pt of stroke.points) {
-        if (pointInRect(pt.x, pt.y, rx1, ry1, rx2, ry2)) return true;
-      }
-      return false;
-    }
-
-    function computeSelection() {
-      if (!selectionRect) { selectedStrokes.clear(); selectedStamps.clear(); return; }
-      const { x1, y1, x2, y2 } = selectionRect;
-      selectedStrokes.clear();
-      selectedStamps.clear();
-      allStrokes.forEach((s, i) => {
-        if (strokeIntersectsRect(s, x1, y1, x2, y2)) selectedStrokes.add(i);
-      });
-      allStamps.forEach((st, i) => {
-        if (pointInRect(st.x, st.y, x1, y1, x2, y2)) selectedStamps.add(i);
-      });
-      updateEvolveButton();
-    }
-
-    function updateEvolveButton() {
-      const has = selectedStrokes.size > 0 || selectedStamps.size > 0;
-      evolveBtn.classList.toggle('visible', has);
-    }
-
-    function clearSelection() {
-      isSelecting = false;
-      selStartW = null;
-      selectionRect = null;
-      selectedStrokes.clear();
-      selectedStamps.clear();
-      updateEvolveButton();
-      redrawAll();
-    }
-
-    // ---- Evolve ----
+    // ---- Evolve stamp ----
     const VIBRANT_COLORS = [
       '#f43f5e','#ef4444','#f97316','#eab308','#84cc16',
       '#22c55e','#10b981','#14b8a6','#06b6d4','#3b82f6',
       '#6366f1','#8b5cf6','#a855f7','#ec4899','#f472b6',
     ];
 
-    function evolveSelection() {
-      if (selectedStrokes.size === 0 && selectedStamps.size === 0) return;
+    // Stamp radius in world units — scales with brushSize so the slider feels direct
+    function evolveRadius() { return brushSize * 12; }
 
-      for (const idx of selectedStrokes) {
-        const s = allStrokes[idx];
-        if (s.tool === 'eraser') continue;
-        // New vibrant color
-        s.color = VIBRANT_COLORS[Math.floor(Math.random() * VIBRANT_COLORS.length)];
-        // Randomise width tastefully: 0.5x – 2.5x, capped at 30
-        const factor = 0.5 + Math.random() * 2;
-        s.width = Math.max(1, Math.min(30, Math.round(s.width * factor)));
-      }
+    function applyEvolveStamp(sx, sy) {
+      const { x: wx, y: wy } = screenToWorld(sx, sy);
+      const r2 = evolveRadius() * evolveRadius();
+      let hit = false;
 
-      for (const idx of selectedStamps) {
-        const st = allStamps[idx];
-        // Swap to a different emoji
-        let pick;
-        do { pick = EMOJI_LIST[Math.floor(Math.random() * EMOJI_LIST.length)]; }
-        while (pick === st.emoji && EMOJI_LIST.length > 1);
-        st.emoji = pick;
-        // Randomise size 0.6x – 2x, capped at 150
-        const factor = 0.6 + Math.random() * 1.4;
-        st.size = Math.max(10, Math.min(150, Math.round(st.size * factor)));
-      }
+      allStrokes.forEach(s => {
+        if (s.tool === 'eraser') return;
+        if (s.points.some(pt => { const dx = pt.x-wx, dy = pt.y-wy; return dx*dx+dy*dy <= r2; })) {
+          s.color = VIBRANT_COLORS[Math.floor(Math.random() * VIBRANT_COLORS.length)];
+          const f = 0.5 + Math.random() * 2;
+          s.width = Math.max(1, Math.min(30, Math.round(s.width * f)));
+          hit = true;
+        }
+      });
 
-      selectionRect = null;
-      selectedStrokes.clear();
-      selectedStamps.clear();
-      updateEvolveButton();
-      redrawAll();
+      allStamps.forEach(st => {
+        const dx = st.x-wx, dy = st.y-wy;
+        if (dx*dx+dy*dy <= r2) {
+          let pick;
+          do { pick = EMOJI_LIST[Math.floor(Math.random() * EMOJI_LIST.length)]; }
+          while (pick === st.emoji && EMOJI_LIST.length > 1);
+          st.emoji = pick;
+          const f = 0.6 + Math.random() * 1.4;
+          st.size = Math.max(10, Math.min(150, Math.round(st.size * f)));
+          hit = true;
+        }
+      });
+
+      // Visual flash on the ghost circle
+      evolveGhost.classList.add('stamping');
+      setTimeout(() => evolveGhost.classList.remove('stamping'), 180);
+
+      if (hit) redrawAll();
     }
 
-    evolveBtn.addEventListener('click', evolveSelection);
+    function updateEvolveGhost(sx, sy) {
+      const r = evolveRadius() * view.zoom; // convert to screen pixels
+      evolveGhost.style.display  = 'block';
+      evolveGhost.style.left     = sx + 'px';
+      evolveGhost.style.top      = sy + 'px';
+      evolveGhost.style.width    = (r * 2) + 'px';
+      evolveGhost.style.height   = (r * 2) + 'px';
+    }
 
     // ---- Redraw ----
     function redrawAll() {
@@ -720,58 +673,6 @@
       }
       for (const st of allStamps) {
         drawEmojiStamp(st.x, st.y, st.emoji, st.size);
-      }
-
-      // --- Selection highlights (world space) ---
-      if (selectedStrokes.size > 0) {
-        ctx.save();
-        ctx.globalAlpha = 0.38;
-        ctx.globalCompositeOperation = 'source-over';
-        ctx.strokeStyle = '#7c3aed';
-        ctx.lineCap = 'round';
-        ctx.lineJoin = 'round';
-        for (const idx of selectedStrokes) {
-          const s = allStrokes[idx];
-          if (s.points.length < 2 || s.tool === 'eraser') continue;
-          ctx.lineWidth = s.width + 8;
-          ctx.beginPath();
-          ctx.moveTo(s.points[0].x, s.points[0].y);
-          for (let i = 1; i < s.points.length; i++) ctx.lineTo(s.points[i].x, s.points[i].y);
-          ctx.stroke();
-        }
-        ctx.restore();
-      }
-      if (selectedStamps.size > 0) {
-        ctx.save();
-        ctx.globalAlpha = 0.25;
-        ctx.fillStyle = '#7c3aed';
-        for (const idx of selectedStamps) {
-          const st = allStamps[idx];
-          ctx.beginPath();
-          ctx.arc(st.x, st.y, st.size * 0.6 + 6, 0, Math.PI * 2);
-          ctx.fill();
-        }
-        ctx.restore();
-      }
-
-      // --- Selection rectangle (screen space) ---
-      if (selectionRect) {
-        const dpr = window.devicePixelRatio || 1;
-        const s1 = worldToScreen(selectionRect.x1, selectionRect.y1);
-        const s2 = worldToScreen(selectionRect.x2, selectionRect.y2);
-        ctx.setTransform(1, 0, 0, 1, 0, 0);
-        ctx.save();
-        const rx = Math.min(s1.x, s2.x) * dpr;
-        const ry = Math.min(s1.y, s2.y) * dpr;
-        const rw = Math.abs(s2.x - s1.x) * dpr;
-        const rh = Math.abs(s2.y - s1.y) * dpr;
-        ctx.fillStyle = 'rgba(124,58,237,0.06)';
-        ctx.fillRect(rx, ry, rw, rh);
-        ctx.strokeStyle = '#7c3aed';
-        ctx.lineWidth = 1.5 * dpr;
-        ctx.setLineDash([5 * dpr, 4 * dpr]);
-        ctx.strokeRect(rx, ry, rw, rh);
-        ctx.restore();
       }
 
       updateRemoteCursorPositions();
@@ -804,18 +705,8 @@
       }
       if (e.button === 0) {
         e.preventDefault();
-        if (currentTool === 'emoji') { placeStamp(e.clientX, e.clientY); return; }
-        if (currentTool === 'select') {
-          isSelecting = true;
-          const { x, y } = screenToWorld(e.clientX, e.clientY);
-          selStartW = { x, y };
-          selectionRect = { x1: x, y1: y, x2: x, y2: y };
-          selectedStrokes.clear();
-          selectedStamps.clear();
-          updateEvolveButton();
-          redrawAll();
-          return;
-        }
+        if (currentTool === 'emoji')  { placeStamp(e.clientX, e.clientY); return; }
+        if (currentTool === 'evolve') { applyEvolveStamp(e.clientX, e.clientY); return; }
         beginStroke(e.clientX, e.clientY);
       }
     });
@@ -823,41 +714,15 @@
       if (isPanning) { updatePan(e.clientX, e.clientY); return; }
       const { x, y } = screenToWorld(e.clientX, e.clientY);
       socket.emit('cursor-move', { x, y });
-      if (currentTool === 'emoji') { updateEmojiGhost(e.clientX, e.clientY); return; }
-      if (isSelecting) {
-        selectionRect = { x1: selStartW.x, y1: selStartW.y, x2: x, y2: y };
-        redrawAll();
-        return;
-      }
+      if (currentTool === 'emoji')  { updateEmojiGhost(e.clientX, e.clientY); return; }
+      if (currentTool === 'evolve') { updateEvolveGhost(e.clientX, e.clientY); return; }
       continueStroke(e.clientX, e.clientY);
     });
-    canvas.addEventListener('mouseup', (e) => {
-      if (isPanning) { stopPan(); return; }
-      if (e.button === 0) {
-        if (isSelecting) {
-          isSelecting = false;
-          // If drag was too small, treat as a click = clear selection
-          const wThresh = 4 / view.zoom;
-          const tooSmall = Math.abs(selectionRect.x2 - selectionRect.x1) < wThresh &&
-                           Math.abs(selectionRect.y2 - selectionRect.y1) < wThresh;
-          if (tooSmall) { selectionRect = null; updateEvolveButton(); }
-          else { computeSelection(); }
-          redrawAll();
-          return;
-        }
-        endStroke();
-      }
-    });
+    canvas.addEventListener('mouseup',    (e) => { if (isPanning) { stopPan(); return; } if (e.button === 0) endStroke(); });
     canvas.addEventListener('mouseleave', () => {
       if (isPanning) return;
-      if (isSelecting) {
-        // Finalize selection when cursor leaves canvas
-        isSelecting = false;
-        computeSelection();
-        redrawAll();
-        return;
-      }
-      if (currentTool === 'emoji') { emojiGhost.style.display = 'none'; return; }
+      if (currentTool === 'emoji')  { emojiGhost.style.display  = 'none'; return; }
+      if (currentTool === 'evolve') { evolveGhost.style.display = 'none'; return; }
       endStroke();
     });
     window.addEventListener('mouseup',    (e) => { if (e.button === 1 && isPanning) stopPan(); });
@@ -919,6 +784,9 @@
         } else if (currentTool === 'emoji') {
           isPanTouch = false;
           placeStamp(t.clientX, t.clientY);
+        } else if (currentTool === 'evolve') {
+          isPanTouch = false;
+          applyEvolveStamp(t.clientX, t.clientY);
         } else {
           isPanTouch = false;
           beginStroke(t.clientX, t.clientY);
@@ -1062,8 +930,7 @@
       if (e.key === 'e') { setTool('eraser'); return; }
       if (e.key === 'h') { setTool('pan'); return; }
       if (e.key === 'm') { setTool('emoji'); emojiPanel.classList.toggle('open'); return; }
-      if (e.key === 's') { setTool('select'); return; }
-      if (e.key === 'Escape') { clearSelection(); return; }
+      if (e.key === 'v') { setTool('evolve'); return; }
       if (e.key === '0') { view.panX = 0; view.panY = 0; view.zoom = 1; redrawAll(); showZoom(); return; }
       if (e.key === '=' || e.key === '+') { zoomAt(1.2, window.innerWidth/2, window.innerHeight/2); redrawAll(); showZoom(); return; }
       if (e.key === '-') { zoomAt(1/1.2, window.innerWidth/2, window.innerHeight/2); redrawAll(); showZoom(); return; }

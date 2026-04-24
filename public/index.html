@@ -221,6 +221,8 @@
       font-size: 36px; line-height: 1;
       transform: translate(-50%, -50%);
       display: none;
+      outline: none; border: none; box-shadow: none;
+      background: transparent; user-select: none; -webkit-user-select: none;
     }
     #label-ghost {
       position: fixed; pointer-events: none; z-index: 45;
@@ -542,7 +544,7 @@
     // ---- Emoji stamping ----
     function drawEmojiStamp(x, y, emoji, size) {
       ctx.save();
-      ctx.font = (size / view.zoom) + 'px serif';
+      ctx.font = size + 'px serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.globalCompositeOperation = 'source-over';
@@ -553,7 +555,7 @@
     function placeStamp(sx, sy) {
       if (!currentEmoji) return;
       const { x, y } = screenToWorld(sx, sy);
-      const stamp = { x, y, emoji: currentEmoji, size: brushSize * 5 };
+      const stamp = { x, y, emoji: currentEmoji, size: (brushSize * 5) / view.zoom };
       allStamps.push(stamp);
       redrawAll();
       socket.emit('emoji-place', stamp);
@@ -562,7 +564,7 @@
     // ---- Username label stamping ----
     function drawLabel(x, y, text, size, color) {
       ctx.save();
-      ctx.font = `bold ${size / view.zoom}px sans-serif`;
+      ctx.font = `bold ${size}px sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.globalCompositeOperation = 'source-over';
@@ -573,7 +575,7 @@
 
     function placeUsernameStamp(sx, sy) {
       const { x, y } = screenToWorld(sx, sy);
-      const size = Math.max(24, brushSize * 5);
+      const size = Math.max(24, brushSize * 5) / view.zoom;
       const label = { x, y, text: currentUsername, size, color: currentColor };
       allLabels.push(label);
       redrawAll();

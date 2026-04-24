@@ -160,6 +160,20 @@ io.on('connection', (socket) => {
     }
   });
 
+  socket.on('label-place', async (data) => {
+    socket.broadcast.emit('label-place', { socketId: socket.id, ...data });
+    try {
+      await pool.query(
+        `INSERT INTO strokes (user_id, username, color, width, points, tool, emoji)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [user.id, user.username, data.color || '#000000', data.size || 36,
+         JSON.stringify([{ x: data.x, y: data.y }]), 'label', data.text]
+      );
+    } catch (err) {
+      console.error('Failed to save username label:', err.message);
+    }
+  });
+
   socket.on('disconnect', () => {
     connectedUsers.delete(socket.id);
     io.emit('users-updated', Array.from(connectedUsers.values()));

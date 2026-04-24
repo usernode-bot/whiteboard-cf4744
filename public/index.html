@@ -218,11 +218,8 @@
     #whiteboard.tool-label { cursor: crosshair; }
     #emoji-ghost {
       position: fixed; pointer-events: none; z-index: 45;
-      font-size: 36px; line-height: 1;
-      transform: translateX(-50%);
+      transform: translate(-50%, -50%);
       display: none;
-      outline: none; border: none; box-shadow: none;
-      background: transparent; user-select: none; -webkit-user-select: none;
     }
     #label-ghost {
       position: fixed; pointer-events: none; z-index: 45;
@@ -269,7 +266,7 @@
   <div id="zoom-label">100%</div>
 
   <div id="emoji-picker-panel"></div>
-  <div id="emoji-ghost"></div>
+  <canvas id="emoji-ghost"></canvas>
   <div id="label-ghost"></div>
   <canvas id="whiteboard"></canvas>
 
@@ -438,6 +435,8 @@
     const emojiBtn     = document.getElementById('tool-emoji');
     const emojiPanel   = document.getElementById('emoji-picker-panel');
     const emojiGhost   = document.getElementById('emoji-ghost');
+    const ghostCtx     = emojiGhost.getContext('2d');
+    let   ghostCacheKey = '';
     const colorPicker  = document.getElementById('color-picker');
     const sizeSlider   = document.getElementById('brush-size-slider');
     const sizeLabel    = document.getElementById('size-label');
@@ -597,21 +596,28 @@
 
     function updateEmojiGhost(sx, sy) {
       const size = brushSize * 5;
+      const key = (currentEmoji || '') + '|' + size;
+      if (key !== ghostCacheKey) {
+        ghostCacheKey = key;
+        const dpr = window.devicePixelRatio || 1;
+        const dim = Math.ceil(size * 1.5);
+        emojiGhost.width = Math.ceil(dim * dpr);
+        emojiGhost.height = Math.ceil(dim * dpr);
+        emojiGhost.style.width = dim + 'px';
+        emojiGhost.style.height = dim + 'px';
+        ghostCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        ghostCtx.clearRect(0, 0, dim, dim);
+        ghostCtx.font = size + 'px serif';
+        ghostCtx.textAlign = 'center';
+        ghostCtx.textBaseline = 'alphabetic';
+        const metrics = ghostCtx.measureText(currentEmoji || '');
+        const glyphHeight = metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent;
+        const verticalCenter = metrics.actualBoundingBoxAscent - glyphHeight / 2;
+        ghostCtx.fillText(currentEmoji || '', dim / 2, dim / 2 + verticalCenter);
+      }
       emojiGhost.style.display = 'block';
       emojiGhost.style.left = sx + 'px';
-      emojiGhost.style.fontSize = size + 'px';
-
-      // Use the same measureText approach as drawEmojiStamp to find where the
-      // glyph's visual center sits within the CSS line box, then set top so
-      // that visual center lands exactly at sy.
-      ctx.save();
-      ctx.font = size + 'px serif';
-      ctx.textBaseline = 'alphabetic';
-      const m = ctx.measureText(currentEmoji || '');
-      ctx.restore();
-      const glyphCenterInBox = m.fontBoundingBoxAscent +
-        (m.actualBoundingBoxDescent - m.actualBoundingBoxAscent) / 2;
-      emojiGhost.style.top = (sy - glyphCenterInBox) + 'px';
+      emojiGhost.style.top = sy + 'px';
     }
 
     // ---- Drawing ----

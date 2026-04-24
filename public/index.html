@@ -215,6 +215,7 @@
     #zoom-label.visible { opacity: 1; }
 
     #whiteboard.tool-emoji { cursor: none; }
+    #whiteboard.tool-text { cursor: text; }
     #emoji-ghost {
       position: fixed; pointer-events: none; z-index: 45;
       font-size: 36px; line-height: 1;
@@ -282,6 +283,11 @@
     </button>
     <button id="tool-emoji" title="Emoji Stamp (M)">
       <span style="font-size:20px;line-height:1">😀</span>
+    </button>
+    <button id="tool-text" title="Text (T)">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/>
+      </svg>
     </button>
 
     <div class="separator"></div>
@@ -392,7 +398,7 @@
     window.addEventListener('resize', () => { setupCanvas(); redrawAll(); });
 
     // ---- App state ----
-    let currentTool = 'pen'; // 'pen' | 'eraser' | 'pan' | 'emoji'
+    let currentTool = 'pen'; // 'pen' | 'eraser' | 'pan' | 'emoji' | 'text'
     let currentColor = '#000000';
     let brushSize = 3;
     let isDrawing = false;
@@ -400,6 +406,7 @@
     let currentStrokePoints = [];
     let allStrokes = [];
     let allStamps = [];
+    let allTexts = [];
 
     const EMOJI_LIST = ['😀','😂','😍','🤔','😎','👍','👋','🙏','❤️','🔥','⭐','🎉','💡','✅','❌','🚀','🎨','💯','🎯','🌟','🐱','🌈','🍕','🦄','🏆','💎','🌺','🍦','🐶','🎵'];
     let currentEmoji = '😀';
@@ -413,6 +420,7 @@
     const eraserBtn    = document.getElementById('tool-eraser');
     const panBtn       = document.getElementById('tool-pan');
     const emojiBtn     = document.getElementById('tool-emoji');
+    const textBtn      = document.getElementById('tool-text');
     const emojiPanel   = document.getElementById('emoji-picker-panel');
     const emojiGhost   = document.getElementById('emoji-ghost');
     const colorPicker  = document.getElementById('color-picker');
@@ -428,8 +436,10 @@
       eraserBtn.classList.toggle('active',  t === 'eraser');
       panBtn.classList.toggle('active',     t === 'pan');
       emojiBtn.classList.toggle('active',   t === 'emoji');
+      textBtn.classList.toggle('active',    t === 'text');
       canvas.classList.toggle('tool-pan',   t === 'pan');
       canvas.classList.toggle('tool-emoji', t === 'emoji');
+      canvas.classList.toggle('tool-text',  t === 'text');
       canvas.classList.remove('grabbing');
       if (t !== 'emoji') {
         emojiPanel.classList.remove('open');
@@ -441,6 +451,7 @@
     penBtn.addEventListener('click',    () => setTool('pen'));
     eraserBtn.addEventListener('click', () => setTool('eraser'));
     panBtn.addEventListener('click',    () => setTool('pan'));
+    textBtn.addEventListener('click',   () => setTool('text'));
 
     // Populate emoji picker
     EMOJI_LIST.forEach(emoji => {
@@ -490,6 +501,7 @@
       if (res.ok) {
         allStrokes = [];
         allStamps = [];
+        allTexts = [];
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         applyViewTransform();
@@ -535,6 +547,64 @@
       emojiGhost.style.left = sx + 'px';
       emojiGhost.style.top = sy + 'px';
       emojiGhost.style.fontSize = (brushSize * 5) + 'px';
+    }
+
+    // ---- Text tool ----
+    function drawTextElement(x, y, text, color, size) {
+      ctx.save();
+      ctx.font = `bold ${size}px sans-serif`;
+      ctx.fillStyle = color;
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'top';
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.fillText(text, x, y);
+      ctx.restore();
+    }
+
+    function placeTextAt(sx, sy) {
+      const { x, y } = screenToWorld(sx, sy);
+      const fontSize = Math.max(12, brushSize * 5);
+      const screenFontSize = fontSize * view.zoom;
+
+      const span = document.createElement('span');
+      span.contentEditable = 'true';
+      span.style.cssText = [
+        `position:fixed`,
+        `left:${sx}px`,
+        `top:${sy}px`,
+        `z-index:60`,
+        `border:none`,
+        `outline:1px dashed #7c3aed`,
+        `background:transparent`,
+        `padding:0 2px`,
+        `font:bold ${screenFontSize}px sans-serif`,
+        `color:${currentColor}`,
+        `min-width:4px`,
+        `white-space:nowrap`,
+        `line-height:1`,
+        `cursor:text`,
+      ].join(';');
+      document.body.appendChild(span);
+      span.focus();
+
+      let committed = false;
+      function commitText() {
+        if (committed) return;
+        committed = true;
+        const text = span.textContent.trim();
+        span.remove();
+        if (!text) return;
+        const textEl = { x, y, text, color: currentColor, size: fontSize };
+        allTexts.push(textEl);
+        redrawAll();
+        socket.emit('text-place', textEl);
+      }
+
+      span.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); commitText(); }
+        if (e.key === 'Escape') { committed = true; span.remove(); }
+      });
+      span.addEventListener('blur', commitText);
     }
 
     // ---- Drawing ----
@@ -594,6 +664,9 @@
       for (const st of allStamps) {
         drawEmojiStamp(st.x, st.y, st.emoji, st.size);
       }
+      for (const tx of allTexts) {
+        drawTextElement(tx.x, tx.y, tx.text, tx.color, tx.size);
+      }
       updateRemoteCursorPositions();
     }
 
@@ -625,6 +698,7 @@
       if (e.button === 0) {
         e.preventDefault();
         if (currentTool === 'emoji') { placeStamp(e.clientX, e.clientY); return; }
+        if (currentTool === 'text') { placeTextAt(e.clientX, e.clientY); return; }
         beginStroke(e.clientX, e.clientY);
       }
     });
@@ -633,12 +707,14 @@
       const { x, y } = screenToWorld(e.clientX, e.clientY);
       socket.emit('cursor-move', { x, y });
       if (currentTool === 'emoji') { updateEmojiGhost(e.clientX, e.clientY); return; }
+      if (currentTool === 'text') return;
       continueStroke(e.clientX, e.clientY);
     });
     canvas.addEventListener('mouseup',    (e) => { if (isPanning) { stopPan(); return; } if (e.button === 0) endStroke(); });
     canvas.addEventListener('mouseleave', ()  => {
       if (isPanning) return;
       if (currentTool === 'emoji') { emojiGhost.style.display = 'none'; return; }
+      if (currentTool === 'text') return;
       endStroke();
     });
     window.addEventListener('mouseup',    (e) => { if (e.button === 1 && isPanning) stopPan(); });
@@ -652,7 +728,7 @@
 
     // ---- Spacebar = temporary pan mode ----
     document.addEventListener('keydown', (e) => {
-      if (e.code === 'Space' && !e.target.matches('input,textarea')) {
+      if (e.code === 'Space' && !e.target.matches('input,textarea') && !e.target.isContentEditable) {
         e.preventDefault();
         if (!spaceDown) { spaceDown = true; if (!isPanning && !isDrawing) canvas.classList.add('tool-pan'); }
       }
@@ -700,6 +776,9 @@
         } else if (currentTool === 'emoji') {
           isPanTouch = false;
           placeStamp(t.clientX, t.clientY);
+        } else if (currentTool === 'text') {
+          isPanTouch = false;
+          placeTextAt(t.clientX, t.clientY);
         } else {
           isPanTouch = false;
           beginStroke(t.clientX, t.clientY);
@@ -758,9 +837,12 @@
         const res = await fetch('/api/strokes', { headers });
         if (!res.ok) return;
         const { strokes } = await res.json();
-        allStrokes = strokes.filter(s => s.tool !== 'emoji');
+        allStrokes = strokes.filter(s => s.tool !== 'emoji' && s.tool !== 'text');
         allStamps  = strokes.filter(s => s.tool === 'emoji').map(s => ({
           x: s.points[0].x, y: s.points[0].y, emoji: s.emoji, size: s.width,
+        }));
+        allTexts = strokes.filter(s => s.tool === 'text').map(s => ({
+          x: s.points[0].x, y: s.points[0].y, text: s.emoji, color: s.color, size: s.width,
         }));
         redrawAll();
       } catch (err) { console.error('Failed to load strokes:', err); }
@@ -788,6 +870,7 @@
     socket.on('board-cleared', () => {
       allStrokes = [];
       allStamps  = [];
+      allTexts   = [];
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       applyViewTransform();
@@ -796,6 +879,12 @@
     // ---- Socket.IO emoji events ----
     socket.on('emoji-place', (data) => {
       allStamps.push({ x: data.x, y: data.y, emoji: data.emoji, size: data.size });
+      redrawAll();
+    });
+
+    // ---- Socket.IO text events ----
+    socket.on('text-place', (data) => {
+      allTexts.push({ x: data.x, y: data.y, text: data.text, color: data.color, size: data.size });
       redrawAll();
     });
 
@@ -838,11 +927,12 @@
 
     // ---- Keyboard shortcuts ----
     document.addEventListener('keydown', (e) => {
-      if (e.target.matches('input,textarea')) return;
+      if (e.target.matches('input,textarea') || e.target.isContentEditable) return;
       if (e.key === 'p' || e.key === 'b') { setTool('pen'); return; }
       if (e.key === 'e') { setTool('eraser'); return; }
       if (e.key === 'h') { setTool('pan'); return; }
       if (e.key === 'm') { setTool('emoji'); emojiPanel.classList.toggle('open'); return; }
+      if (e.key === 't') { setTool('text'); return; }
       if (e.key === '0') { view.panX = 0; view.panY = 0; view.zoom = 1; redrawAll(); showZoom(); return; }
       if (e.key === '=' || e.key === '+') { zoomAt(1.2, window.innerWidth/2, window.innerHeight/2); redrawAll(); showZoom(); return; }
       if (e.key === '-') { zoomAt(1/1.2, window.innerWidth/2, window.innerHeight/2); redrawAll(); showZoom(); return; }

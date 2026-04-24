@@ -214,6 +214,17 @@
     }
     #zoom-label.visible { opacity: 1; }
 
+    #quote-banner {
+      position: fixed;
+      top: 10px; left: 50%; transform: translateX(-50%);
+      z-index: 49;
+      font-size: 12px; font-style: italic; color: #c4c4cc;
+      white-space: nowrap; pointer-events: none;
+      letter-spacing: 0.01em;
+      max-width: calc(100vw - 280px);
+      overflow: hidden; text-overflow: ellipsis;
+    }
+
     #whiteboard.tool-emoji { cursor: none; }
     #whiteboard.tool-label { cursor: crosshair; }
     #emoji-ghost {
@@ -262,6 +273,7 @@
 </head>
 <body>
 
+  <div id="quote-banner"></div>
   <div id="title-bar"><span id="connection-dot"></span>whiteboard</div>
   <div id="users-bar"></div>
   <div id="zoom-label">100%</div>
@@ -337,6 +349,22 @@
   </div>
 
   <script>
+    // ---- Quote banner ----
+    (function () {
+      const quotes = [
+        "Creativity is intelligence having fun.",
+        "Every canvas is a journey all its own.",
+        "Make something every day, even if it's terrible.",
+        "The blank page is an invitation.",
+        "Doodle boldly. Regret nothing.",
+        "You can't use up creativity — the more you use, the more you have.",
+        "Art begins where rules end.",
+        "Great things are done by a series of small things.",
+      ];
+      document.getElementById('quote-banner').textContent =
+        "“" + quotes[Math.floor(Math.random() * quotes.length)] + "”";
+    })();
+
     // ---- Auth ----
     const params = new URLSearchParams(window.location.search);
     const token = params.get('token') || '';

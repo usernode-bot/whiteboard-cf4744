@@ -542,7 +542,7 @@
     // ---- Emoji stamping ----
     function drawEmojiStamp(x, y, emoji, size) {
       ctx.save();
-      ctx.font = size + 'px serif';
+      ctx.font = (size / view.zoom) + 'px serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.globalCompositeOperation = 'source-over';
@@ -562,7 +562,7 @@
     // ---- Username label stamping ----
     function drawLabel(x, y, text, size, color) {
       ctx.save();
-      ctx.font = `bold ${size}px sans-serif`;
+      ctx.font = `bold ${size / view.zoom}px sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.globalCompositeOperation = 'source-over';

@@ -218,7 +218,6 @@
     #whiteboard.tool-label { cursor: crosshair; }
     #emoji-ghost {
       position: fixed; pointer-events: none; z-index: 45;
-      font-size: 36px; line-height: 1;
       transform: translate(-50%, -50%);
       display: none;
     }
@@ -267,7 +266,7 @@
   <div id="zoom-label">100%</div>
 
   <div id="emoji-picker-panel"></div>
-  <div id="emoji-ghost"></div>
+  <canvas id="emoji-ghost"></canvas>
   <div id="label-ghost"></div>
   <canvas id="whiteboard"></canvas>
 
@@ -436,6 +435,8 @@
     const emojiBtn     = document.getElementById('tool-emoji');
     const emojiPanel   = document.getElementById('emoji-picker-panel');
     const emojiGhost   = document.getElementById('emoji-ghost');
+    const ghostCtx     = emojiGhost.getContext('2d');
+    let   ghostCacheKey = '';
     const colorPicker  = document.getElementById('color-picker');
     const sizeSlider   = document.getElementById('brush-size-slider');
     const sizeLabel    = document.getElementById('size-label');
@@ -553,7 +554,7 @@
     function placeStamp(sx, sy) {
       if (!currentEmoji) return;
       const { x, y } = screenToWorld(sx, sy);
-      const stamp = { x, y, emoji: currentEmoji, size: brushSize * 5 };
+      const stamp = { x, y, emoji: currentEmoji, size: (brushSize * 5) / view.zoom };
       allStamps.push(stamp);
       redrawAll();
       socket.emit('emoji-place', stamp);
@@ -573,7 +574,7 @@
 
     function placeUsernameStamp(sx, sy) {
       const { x, y } = screenToWorld(sx, sy);
-      const size = Math.max(24, brushSize * 5);
+      const size = Math.max(24, brushSize * 5) / view.zoom;
       const label = { x, y, text: currentUsername, size, color: currentColor };
       allLabels.push(label);
       redrawAll();
@@ -591,10 +592,31 @@
     }
 
     function updateEmojiGhost(sx, sy) {
+      const size = brushSize * 5;
+      const key = (currentEmoji || '') + '|' + size;
+      if (key !== ghostCacheKey) {
+        ghostCacheKey = key;
+        const dpr = window.devicePixelRatio || 1;
+        // Round up to even device-pixel count so the bitmap center is always
+        // an integer device pixel (avoids half-pixel snap vs CSS translate).
+        const bitmapSize = Math.ceil(size * 1.5 * dpr / 2) * 2;
+        const cssSize = bitmapSize / dpr;
+        emojiGhost.width = bitmapSize;
+        emojiGhost.height = bitmapSize;
+        emojiGhost.style.width = cssSize + 'px';
+        emojiGhost.style.height = cssSize + 'px';
+        // Draw in device pixels directly — same effective size as drawEmojiStamp
+        // (size * dpr device pixels) so the font renderer uses identical metrics.
+        ghostCtx.setTransform(1, 0, 0, 1, 0, 0);
+        ghostCtx.clearRect(0, 0, bitmapSize, bitmapSize);
+        ghostCtx.font = (size * dpr) + 'px serif';
+        ghostCtx.textAlign = 'center';
+        ghostCtx.textBaseline = 'middle';
+        ghostCtx.fillText(currentEmoji || '', bitmapSize / 2, bitmapSize / 2);
+      }
       emojiGhost.style.display = 'block';
       emojiGhost.style.left = sx + 'px';
       emojiGhost.style.top = sy + 'px';
-      emojiGhost.style.fontSize = (brushSize * 5) + 'px';
     }
 
     // ---- Drawing ----

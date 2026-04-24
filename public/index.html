@@ -283,6 +283,12 @@
     <button id="tool-emoji" title="Emoji Stamp (M)">
       <span style="font-size:20px;line-height:1">😀</span>
     </button>
+    <button id="btn-username-stamp" title="Stamp your username">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="8" r="4"/>
+        <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
+      </svg>
+    </button>
 
     <div class="separator"></div>
 
@@ -325,6 +331,10 @@
     const params = new URLSearchParams(window.location.search);
     const token = params.get('token') || '';
     const headers = token ? { 'x-usernode-token': token } : {};
+    function decodeJwt(t) {
+      try { return JSON.parse(atob(t.split('.')[1])); } catch { return {}; }
+    }
+    const currentUsername = (token ? decodeJwt(token).username : '') || 'anonymous';
 
     // ---- Socket.IO ----
     const socket = io({
@@ -400,6 +410,7 @@
     let currentStrokePoints = [];
     let allStrokes = [];
     let allStamps = [];
+    let allLabels = [];
 
     const EMOJI_LIST = ['😀','😂','😍','🤔','😎','👍','👋','🙏','❤️','🔥','⭐','🎉','💡','✅','❌','🚀','🎨','💯','🎯','🌟','🐱','🌈','🍕','🦄','🏆','💎','🌺','🍦','🐶','🎵'];
     let currentEmoji = '😀';
@@ -418,9 +429,10 @@
     const colorPicker  = document.getElementById('color-picker');
     const sizeSlider   = document.getElementById('brush-size-slider');
     const sizeLabel    = document.getElementById('size-label');
-    const clearBtn     = document.getElementById('btn-clear');
-    const resetViewBtn = document.getElementById('btn-reset-view');
-    const swatches     = document.querySelectorAll('.swatch');
+    const clearBtn          = document.getElementById('btn-clear');
+    const resetViewBtn      = document.getElementById('btn-reset-view');
+    const usernameStampBtn  = document.getElementById('btn-username-stamp');
+    const swatches          = document.querySelectorAll('.swatch');
 
     function setTool(t) {
       currentTool = t;
@@ -499,6 +511,7 @@
       view.panX = 0; view.panY = 0; view.zoom = 1;
       redrawAll(); showZoom();
     });
+    usernameStampBtn.addEventListener('click', () => placeUsernameStamp());
 
     // ---- Zoom badge ----
     const zoomLabel = document.getElementById('zoom-label');
@@ -528,6 +541,29 @@
       allStamps.push(stamp);
       redrawAll();
       socket.emit('emoji-place', stamp);
+    }
+
+    // ---- Username label stamping ----
+    function drawLabel(x, y, text, size, color) {
+      ctx.save();
+      ctx.font = `bold ${size}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.fillStyle = color;
+      ctx.fillText(text, x, y);
+      ctx.restore();
+    }
+
+    function placeUsernameStamp() {
+      const cx = window.innerWidth / 2;
+      const cy = window.innerHeight / 2;
+      const { x, y } = screenToWorld(cx, cy);
+      const size = Math.max(24, brushSize * 5);
+      const label = { x, y, text: currentUsername, size, color: currentColor };
+      allLabels.push(label);
+      redrawAll();
+      socket.emit('label-place', label);
     }
 
     function updateEmojiGhost(sx, sy) {
@@ -593,6 +629,9 @@
       }
       for (const st of allStamps) {
         drawEmojiStamp(st.x, st.y, st.emoji, st.size);
+      }
+      for (const lb of allLabels) {
+        drawLabel(lb.x, lb.y, lb.text, lb.size, lb.color);
       }
       updateRemoteCursorPositions();
     }
@@ -758,9 +797,12 @@
         const res = await fetch('/api/strokes', { headers });
         if (!res.ok) return;
         const { strokes } = await res.json();
-        allStrokes = strokes.filter(s => s.tool !== 'emoji');
+        allStrokes = strokes.filter(s => s.tool !== 'emoji' && s.tool !== 'label');
         allStamps  = strokes.filter(s => s.tool === 'emoji').map(s => ({
           x: s.points[0].x, y: s.points[0].y, emoji: s.emoji, size: s.width,
+        }));
+        allLabels  = strokes.filter(s => s.tool === 'label').map(s => ({
+          x: s.points[0].x, y: s.points[0].y, text: s.emoji, size: s.width, color: s.color,
         }));
         redrawAll();
       } catch (err) { console.error('Failed to load strokes:', err); }
@@ -788,6 +830,7 @@
     socket.on('board-cleared', () => {
       allStrokes = [];
       allStamps  = [];
+      allLabels  = [];
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       applyViewTransform();
@@ -796,6 +839,12 @@
     // ---- Socket.IO emoji events ----
     socket.on('emoji-place', (data) => {
       allStamps.push({ x: data.x, y: data.y, emoji: data.emoji, size: data.size });
+      redrawAll();
+    });
+
+    // ---- Socket.IO label events ----
+    socket.on('label-place', (data) => {
+      allLabels.push({ x: data.x, y: data.y, text: data.text, size: data.size, color: data.color });
       redrawAll();
     });
 

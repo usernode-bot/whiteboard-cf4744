@@ -597,17 +597,22 @@
       if (key !== ghostCacheKey) {
         ghostCacheKey = key;
         const dpr = window.devicePixelRatio || 1;
-        const dim = Math.ceil(size * 1.5);
-        emojiGhost.width = Math.ceil(dim * dpr);
-        emojiGhost.height = Math.ceil(dim * dpr);
-        emojiGhost.style.width = dim + 'px';
-        emojiGhost.style.height = dim + 'px';
-        ghostCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
-        ghostCtx.clearRect(0, 0, dim, dim);
-        ghostCtx.font = size + 'px serif';
+        // Round up to even device-pixel count so the bitmap center is always
+        // an integer device pixel (avoids half-pixel snap vs CSS translate).
+        const bitmapSize = Math.ceil(size * 1.5 * dpr / 2) * 2;
+        const cssSize = bitmapSize / dpr;
+        emojiGhost.width = bitmapSize;
+        emojiGhost.height = bitmapSize;
+        emojiGhost.style.width = cssSize + 'px';
+        emojiGhost.style.height = cssSize + 'px';
+        // Draw in device pixels directly — same effective size as drawEmojiStamp
+        // (size * dpr device pixels) so the font renderer uses identical metrics.
+        ghostCtx.setTransform(1, 0, 0, 1, 0, 0);
+        ghostCtx.clearRect(0, 0, bitmapSize, bitmapSize);
+        ghostCtx.font = (size * dpr) + 'px serif';
         ghostCtx.textAlign = 'center';
         ghostCtx.textBaseline = 'middle';
-        ghostCtx.fillText(currentEmoji || '', dim / 2, dim / 2);
+        ghostCtx.fillText(currentEmoji || '', bitmapSize / 2, bitmapSize / 2);
       }
       emojiGhost.style.display = 'block';
       emojiGhost.style.left = sx + 'px';

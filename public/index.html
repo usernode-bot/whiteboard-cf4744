@@ -545,12 +545,9 @@
       ctx.save();
       ctx.font = size + 'px serif';
       ctx.textAlign = 'center';
-      ctx.textBaseline = 'alphabetic';
+      ctx.textBaseline = 'middle';
       ctx.globalCompositeOperation = 'source-over';
-      const metrics = ctx.measureText(emoji);
-      const glyphHeight = metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent;
-      const verticalCenter = metrics.actualBoundingBoxAscent - glyphHeight / 2;
-      ctx.fillText(emoji, x, y + verticalCenter);
+      ctx.fillText(emoji, x, y);
       ctx.restore();
     }
 
@@ -609,11 +606,8 @@
         ghostCtx.clearRect(0, 0, dim, dim);
         ghostCtx.font = size + 'px serif';
         ghostCtx.textAlign = 'center';
-        ghostCtx.textBaseline = 'alphabetic';
-        const metrics = ghostCtx.measureText(currentEmoji || '');
-        const glyphHeight = metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent;
-        const verticalCenter = metrics.actualBoundingBoxAscent - glyphHeight / 2;
-        ghostCtx.fillText(currentEmoji || '', dim / 2, dim / 2 + verticalCenter);
+        ghostCtx.textBaseline = 'middle';
+        ghostCtx.fillText(currentEmoji || '', dim / 2, dim / 2);
       }
       emojiGhost.style.display = 'block';
       emojiGhost.style.left = sx + 'px';

@@ -215,11 +215,20 @@
     #zoom-label.visible { opacity: 1; }
 
     #whiteboard.tool-emoji { cursor: none; }
+    #whiteboard.tool-label { cursor: crosshair; }
     #emoji-ghost {
       position: fixed; pointer-events: none; z-index: 45;
       font-size: 36px; line-height: 1;
       transform: translate(-50%, -50%);
       display: none;
+    }
+    #label-ghost {
+      position: fixed; pointer-events: none; z-index: 45;
+      font-weight: bold; font-family: sans-serif;
+      transform: translate(-50%, -50%);
+      opacity: 0.5;
+      display: none;
+      white-space: nowrap;
     }
     #emoji-picker-panel {
       position: fixed;
@@ -259,6 +268,7 @@
 
   <div id="emoji-picker-panel"></div>
   <div id="emoji-ghost"></div>
+  <div id="label-ghost"></div>
   <canvas id="whiteboard"></canvas>
 
   <div id="toolbar">
@@ -432,22 +442,28 @@
     const clearBtn          = document.getElementById('btn-clear');
     const resetViewBtn      = document.getElementById('btn-reset-view');
     const usernameStampBtn  = document.getElementById('btn-username-stamp');
+    const labelGhost        = document.getElementById('label-ghost');
     const swatches          = document.querySelectorAll('.swatch');
 
     function setTool(t) {
       currentTool = t;
-      penBtn.classList.toggle('active',     t === 'pen');
-      eraserBtn.classList.toggle('active',  t === 'eraser');
-      panBtn.classList.toggle('active',     t === 'pan');
-      emojiBtn.classList.toggle('active',   t === 'emoji');
-      canvas.classList.toggle('tool-pan',   t === 'pan');
-      canvas.classList.toggle('tool-emoji', t === 'emoji');
+      penBtn.classList.toggle('active',          t === 'pen');
+      eraserBtn.classList.toggle('active',       t === 'eraser');
+      panBtn.classList.toggle('active',          t === 'pan');
+      emojiBtn.classList.toggle('active',        t === 'emoji');
+      usernameStampBtn.classList.toggle('active', t === 'label');
+      canvas.classList.toggle('tool-pan',        t === 'pan');
+      canvas.classList.toggle('tool-emoji',      t === 'emoji');
+      canvas.classList.toggle('tool-label',      t === 'label');
       canvas.classList.remove('grabbing');
       if (t !== 'emoji') {
         emojiPanel.classList.remove('open');
         emojiGhost.style.display = 'none';
       } else {
         emojiGhost.textContent = currentEmoji;
+      }
+      if (t !== 'label') {
+        labelGhost.style.display = 'none';
       }
     }
     penBtn.addEventListener('click',    () => setTool('pen'));
@@ -511,7 +527,7 @@
       view.panX = 0; view.panY = 0; view.zoom = 1;
       redrawAll(); showZoom();
     });
-    usernameStampBtn.addEventListener('click', () => placeUsernameStamp());
+    usernameStampBtn.addEventListener('click', () => setTool('label'));
 
     // ---- Zoom badge ----
     const zoomLabel = document.getElementById('zoom-label');
@@ -555,15 +571,24 @@
       ctx.restore();
     }
 
-    function placeUsernameStamp() {
-      const cx = window.innerWidth / 2;
-      const cy = window.innerHeight / 2;
-      const { x, y } = screenToWorld(cx, cy);
+    function placeUsernameStamp(sx, sy) {
+      const { x, y } = screenToWorld(sx, sy);
       const size = Math.max(24, brushSize * 5);
       const label = { x, y, text: currentUsername, size, color: currentColor };
       allLabels.push(label);
       redrawAll();
       socket.emit('label-place', label);
+      setTool('pen');
+    }
+
+    function updateLabelGhost(sx, sy) {
+      const size = Math.max(24, brushSize * 5);
+      labelGhost.style.display = 'block';
+      labelGhost.style.left = sx + 'px';
+      labelGhost.style.top = sy + 'px';
+      labelGhost.style.fontSize = size + 'px';
+      labelGhost.style.color = currentColor;
+      labelGhost.textContent = currentUsername;
     }
 
     function updateEmojiGhost(sx, sy) {
@@ -664,6 +689,7 @@
       if (e.button === 0) {
         e.preventDefault();
         if (currentTool === 'emoji') { placeStamp(e.clientX, e.clientY); return; }
+        if (currentTool === 'label') { placeUsernameStamp(e.clientX, e.clientY); return; }
         beginStroke(e.clientX, e.clientY);
       }
     });
@@ -672,12 +698,14 @@
       const { x, y } = screenToWorld(e.clientX, e.clientY);
       socket.emit('cursor-move', { x, y });
       if (currentTool === 'emoji') { updateEmojiGhost(e.clientX, e.clientY); return; }
+      if (currentTool === 'label') { updateLabelGhost(e.clientX, e.clientY); return; }
       continueStroke(e.clientX, e.clientY);
     });
     canvas.addEventListener('mouseup',    (e) => { if (isPanning) { stopPan(); return; } if (e.button === 0) endStroke(); });
     canvas.addEventListener('mouseleave', ()  => {
       if (isPanning) return;
       if (currentTool === 'emoji') { emojiGhost.style.display = 'none'; return; }
+      if (currentTool === 'label') { labelGhost.style.display = 'none'; return; }
       endStroke();
     });
     window.addEventListener('mouseup',    (e) => { if (e.button === 1 && isPanning) stopPan(); });
@@ -739,6 +767,9 @@
         } else if (currentTool === 'emoji') {
           isPanTouch = false;
           placeStamp(t.clientX, t.clientY);
+        } else if (currentTool === 'label') {
+          isPanTouch = false;
+          placeUsernameStamp(t.clientX, t.clientY);
         } else {
           isPanTouch = false;
           beginStroke(t.clientX, t.clientY);
@@ -888,6 +919,7 @@
     // ---- Keyboard shortcuts ----
     document.addEventListener('keydown', (e) => {
       if (e.target.matches('input,textarea')) return;
+      if (e.key === 'Escape' && currentTool === 'label') { setTool('pen'); return; }
       if (e.key === 'p' || e.key === 'b') { setTool('pen'); return; }
       if (e.key === 'e') { setTool('eraser'); return; }
       if (e.key === 'h') { setTool('pan'); return; }

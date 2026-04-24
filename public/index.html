@@ -546,9 +546,12 @@
       ctx.save();
       ctx.font = size + 'px serif';
       ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
+      ctx.textBaseline = 'alphabetic';
       ctx.globalCompositeOperation = 'source-over';
-      ctx.fillText(emoji, x, y + size * 0.3);
+      const metrics = ctx.measureText(emoji);
+      const glyphHeight = metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent;
+      const verticalCenter = metrics.actualBoundingBoxAscent - glyphHeight / 2;
+      ctx.fillText(emoji, x, y + verticalCenter);
       ctx.restore();
     }
 

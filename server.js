@@ -62,10 +62,9 @@ app.get('/health', (_req, res) => res.json({ status: 'ok' }));
 app.get('/api/strokes', async (req, res) => {
   try {
     const { rows } = await pool.query(
-      `SELECT id, user_id, username, color, width, points, tool, emoji
+      `SELECT id, user_id, username, color, width, points, tool, emoji, font
        FROM strokes ORDER BY id ASC`
     );
-    // Parse points from JSON string
     const strokes = rows.map(r => ({
       ...r,
       points: typeof r.points === 'string' ? JSON.parse(r.points) : r.points,
@@ -121,7 +120,6 @@ io.on('connection', (socket) => {
   socket.on('draw-end', async (data) => {
     socket.broadcast.emit('draw-end', { socketId: socket.id });
 
-    // Persist the completed stroke
     if (data && data.points && data.points.length > 0) {
       try {
         await pool.query(
@@ -160,17 +158,38 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('text-place', async (data) => {
-    socket.broadcast.emit('text-place', { socketId: socket.id, ...data });
+  // text-place: insert to DB first, get id, then broadcast with id
+  socket.on('text-place', async (data, callback) => {
     try {
-      await pool.query(
-        `INSERT INTO strokes (user_id, username, color, width, points, tool, emoji)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      const result = await pool.query(
+        `INSERT INTO strokes (user_id, username, color, width, points, tool, emoji, font)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
         [user.id, user.username, data.color || '#000000', data.size || 24,
-         JSON.stringify([{ x: data.x, y: data.y }]), 'text', data.text]
+         JSON.stringify([{ x: data.x, y: data.y }]), 'text', data.text, data.font || 'sans-serif']
       );
+      const id = result.rows[0].id;
+      socket.broadcast.emit('text-place', { socketId: socket.id, id, ...data });
+      if (typeof callback === 'function') callback({ id });
     } catch (err) {
       console.error('Failed to save text:', err.message);
+      if (typeof callback === 'function') callback({ error: err.message });
+    }
+  });
+
+  // text-update: update position/size/font/color and broadcast
+  socket.on('text-update', async (data) => {
+    socket.broadcast.emit('text-update', { socketId: socket.id, ...data });
+    if (data.id == null) return;
+    try {
+      await pool.query(
+        `UPDATE strokes SET color=$1, width=$2, points=$3, font=$4
+         WHERE id=$5 AND tool='text'`,
+        [data.color, data.size,
+         JSON.stringify([{ x: data.x, y: data.y }]),
+         data.font || 'sans-serif', data.id]
+      );
+    } catch (err) {
+      console.error('Failed to update text:', err.message);
     }
   });
 
@@ -220,6 +239,7 @@ async function start() {
     )
   `);
   await pool.query(`ALTER TABLE strokes ADD COLUMN IF NOT EXISTS emoji TEXT`);
+  await pool.query(`ALTER TABLE strokes ADD COLUMN IF NOT EXISTS font VARCHAR(128)`);
 
   server.listen(port, () => console.log(`Listening on :${port}`));
 }

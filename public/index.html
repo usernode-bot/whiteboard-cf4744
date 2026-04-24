@@ -64,6 +64,9 @@
   })();
   </script>
   <title>whiteboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bangers&family=Caveat:wght@700&family=Lobster&family=Pacifico&family=Permanent+Marker&family=Press+Start+2P&display=swap" rel="stylesheet">
   <script src="https://cdn.tailwindcss.com"></script>
   <script>tailwind.config = {}</script>
   <script src="/socket.io/socket.io.js"></script>
@@ -125,6 +128,31 @@
       width: 40px; height: 40px; border: none; padding: 0; cursor: pointer;
     }
 
+    #text-color-wrapper {
+      position: relative; width: 32px; height: 32px; flex-shrink: 0;
+      border-radius: 50%; overflow: hidden;
+      border: 2px solid rgba(161,161,170,0.4); cursor: pointer;
+      title: 'Text color';
+    }
+    #text-color-wrapper input {
+      position: absolute; top: -4px; left: -4px;
+      width: 40px; height: 40px; border: none; padding: 0; cursor: pointer;
+    }
+
+    #font-select {
+      height: 32px; flex-shrink: 0;
+      border: 1px solid rgba(161,161,170,0.4); border-radius: 6px;
+      background: rgba(255,255,255,0.95); color: #27272a;
+      font-size: 12px; padding: 0 6px; cursor: pointer; outline: none;
+      max-width: 138px;
+    }
+    #font-select:focus { border-color: #7c3aed; box-shadow: 0 0 0 2px rgba(124,58,237,0.15); }
+
+    #text-controls {
+      display: none; align-items: center; gap: 6px; flex-shrink: 0;
+    }
+    #text-controls.visible { display: flex; }
+
     #brush-size-slider {
       -webkit-appearance: none; appearance: none;
       width: 80px; height: 4px; border-radius: 2px;
@@ -157,6 +185,9 @@
       .swatch { width: 20px !important; height: 20px !important; }
       #color-picker-wrapper { width: 26px; height: 26px; }
       #color-picker-wrapper input { width: 34px; height: 34px; }
+      #text-color-wrapper { width: 26px; height: 26px; }
+      #text-color-wrapper input { width: 34px; height: 34px; }
+      #font-select { max-width: 100px; font-size: 11px; }
     }
 
     #users-bar {
@@ -215,7 +246,6 @@
     #zoom-label.visible { opacity: 1; }
 
     #whiteboard.tool-emoji { cursor: none; }
-    #whiteboard.tool-text { cursor: text; }
     #emoji-ghost {
       position: fixed; pointer-events: none; z-index: 45;
       font-size: 36px; line-height: 1;
@@ -290,6 +320,14 @@
       </svg>
     </button>
 
+    <div id="text-controls">
+      <select id="font-select" title="Font"></select>
+      <div id="text-color-wrapper" title="Text color">
+        <input type="color" id="text-color-picker" value="#000000">
+      </div>
+      <div class="separator" style="margin:0"></div>
+    </div>
+
     <div class="separator"></div>
 
     <div id="color-picker-wrapper">
@@ -352,8 +390,6 @@
     const ctx    = canvas.getContext('2d');
 
     // ---- View (pan + zoom) ----
-    // All stroke coordinates are stored in "world space".
-    // screen = world * zoom + pan
     const view = { panX: 0, panY: 0, zoom: 1 };
     const MIN_ZOOM = 0.05, MAX_ZOOM = 20;
 
@@ -374,7 +410,6 @@
       return { x: wx * view.zoom + view.panX, y: wy * view.zoom + view.panY };
     }
 
-    // Zoom by factor, keeping screen point (sx,sy) fixed over its world position.
     function zoomAt(factor, sx, sy) {
       const wx = (sx - view.panX) / view.zoom;
       const wy = (sy - view.panY) / view.zoom;
@@ -397,50 +432,90 @@
     setupCanvas();
     window.addEventListener('resize', () => { setupCanvas(); redrawAll(); });
 
+    // ---- Font list ----
+    const FONTS = [
+      { label: 'Sans-Serif',        value: 'Arial, sans-serif' },
+      { label: 'Serif',             value: 'Georgia, serif' },
+      { label: 'Monospace',         value: '"Courier New", monospace' },
+      { label: 'Handwriting',       value: "'Caveat', cursive" },
+      { label: 'Pacifico',          value: "'Pacifico', cursive" },
+      { label: 'Lobster',           value: "'Lobster', cursive" },
+      { label: 'Permanent Marker',  value: "'Permanent Marker', cursive" },
+      { label: 'Bangers',           value: "'Bangers', cursive" },
+      { label: 'Press Start 2P',    value: "'Press Start 2P', cursive" },
+    ];
+
     // ---- App state ----
-    let currentTool = 'pen'; // 'pen' | 'eraser' | 'pan' | 'emoji' | 'text'
+    let currentTool  = 'pen'; // 'pen' | 'eraser' | 'pan' | 'emoji' | 'text'
     let currentColor = '#000000';
-    let brushSize = 3;
-    let isDrawing = false;
+    let textColor    = '#000000';
+    let currentFont  = FONTS[0].value;
+    let brushSize    = 3;
+    let isDrawing    = false;
     let lastWX = 0, lastWY = 0;
     let currentStrokePoints = [];
     let allStrokes = [];
-    let allStamps = [];
-    let allTexts = [];
+    let allStamps  = [];
+    let allTexts   = []; // { id, x, y, text, color, size, font }
+
+    // Text interaction state
+    let hoveredTextIdx  = -1;
+    let draggingText    = null; // { idx, startWX, startWY, startX, startY }
+    let resizingText    = null; // { idx, startWX, startWY, startSize }
 
     const EMOJI_LIST = ['😀','😂','😍','🤔','😎','👍','👋','🙏','❤️','🔥','⭐','🎉','💡','✅','❌','🚀','🎨','💯','🎯','🌟','🐱','🌈','🍕','🦄','🏆','💎','🌺','🍦','🐶','🎵'];
     let currentEmoji = '😀';
 
-    const remoteStrokes     = new Map(); // socketId -> in-progress stroke data
-    const remoteCursors     = new Map(); // socketId -> DOM element
-    const remoteCursorWorld = new Map(); // socketId -> { x, y } in world coords
+    const remoteStrokes     = new Map();
+    const remoteCursors     = new Map();
+    const remoteCursorWorld = new Map();
 
-    // ---- Toolbar ----
-    const penBtn       = document.getElementById('tool-pen');
-    const eraserBtn    = document.getElementById('tool-eraser');
-    const panBtn       = document.getElementById('tool-pan');
-    const emojiBtn     = document.getElementById('tool-emoji');
-    const textBtn      = document.getElementById('tool-text');
-    const emojiPanel   = document.getElementById('emoji-picker-panel');
-    const emojiGhost   = document.getElementById('emoji-ghost');
-    const colorPicker  = document.getElementById('color-picker');
-    const sizeSlider   = document.getElementById('brush-size-slider');
-    const sizeLabel    = document.getElementById('size-label');
-    const clearBtn     = document.getElementById('btn-clear');
-    const resetViewBtn = document.getElementById('btn-reset-view');
-    const swatches     = document.querySelectorAll('.swatch');
+    // ---- Toolbar elements ----
+    const penBtn        = document.getElementById('tool-pen');
+    const eraserBtn     = document.getElementById('tool-eraser');
+    const panBtn        = document.getElementById('tool-pan');
+    const emojiBtn      = document.getElementById('tool-emoji');
+    const textBtn       = document.getElementById('tool-text');
+    const textControls  = document.getElementById('text-controls');
+    const fontSelect    = document.getElementById('font-select');
+    const textColorPicker = document.getElementById('text-color-picker');
+    const textColorWrapper = document.getElementById('text-color-wrapper');
+    const emojiPanel    = document.getElementById('emoji-picker-panel');
+    const emojiGhost    = document.getElementById('emoji-ghost');
+    const colorPicker   = document.getElementById('color-picker');
+    const sizeSlider    = document.getElementById('brush-size-slider');
+    const sizeLabel     = document.getElementById('size-label');
+    const clearBtn      = document.getElementById('btn-clear');
+    const resetViewBtn  = document.getElementById('btn-reset-view');
+    const swatches      = document.querySelectorAll('.swatch');
+
+    // Populate font dropdown
+    FONTS.forEach((f, i) => {
+      const opt = document.createElement('option');
+      opt.value = f.value;
+      opt.textContent = f.label;
+      opt.style.fontFamily = f.value;
+      fontSelect.appendChild(opt);
+    });
+    fontSelect.value = currentFont;
+
+    fontSelect.addEventListener('change', () => { currentFont = fontSelect.value; });
+    textColorPicker.addEventListener('input', (e) => {
+      textColor = e.target.value;
+      textColorWrapper.style.borderColor = textColor;
+    });
 
     function setTool(t) {
       currentTool = t;
-      penBtn.classList.toggle('active',     t === 'pen');
-      eraserBtn.classList.toggle('active',  t === 'eraser');
-      panBtn.classList.toggle('active',     t === 'pan');
-      emojiBtn.classList.toggle('active',   t === 'emoji');
-      textBtn.classList.toggle('active',    t === 'text');
+      penBtn.classList.toggle('active',    t === 'pen');
+      eraserBtn.classList.toggle('active', t === 'eraser');
+      panBtn.classList.toggle('active',    t === 'pan');
+      emojiBtn.classList.toggle('active',  t === 'emoji');
+      textBtn.classList.toggle('active',   t === 'text');
       canvas.classList.toggle('tool-pan',   t === 'pan');
       canvas.classList.toggle('tool-emoji', t === 'emoji');
-      canvas.classList.toggle('tool-text',  t === 'text');
       canvas.classList.remove('grabbing');
+      textControls.classList.toggle('visible', t === 'text');
       if (t !== 'emoji') {
         emojiPanel.classList.remove('open');
         emojiGhost.style.display = 'none';
@@ -473,7 +548,6 @@
       if (currentTool !== 'emoji') { setTool('emoji'); }
       emojiPanel.classList.toggle('open');
     });
-    // Close picker when clicking outside
     document.addEventListener('click', (e) => {
       if (!emojiPanel.contains(e.target) && e.target !== emojiBtn && !emojiBtn.contains(e.target)) {
         emojiPanel.classList.remove('open');
@@ -499,9 +573,7 @@
     clearBtn.addEventListener('click', async () => {
       const res = await fetch('/api/clear', { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers } });
       if (res.ok) {
-        allStrokes = [];
-        allStamps = [];
-        allTexts = [];
+        allStrokes = []; allStamps = []; allTexts = [];
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         applyViewTransform();
@@ -550,21 +622,78 @@
     }
 
     // ---- Text tool ----
-    function drawTextElement(x, y, text, color, size) {
+
+    // Measure text bounding box in world coordinates
+    function getTextBounds(tx) {
       ctx.save();
-      ctx.font = `bold ${size}px sans-serif`;
-      ctx.fillStyle = color;
+      applyViewTransform();
+      ctx.font = `bold ${tx.size}px ${tx.font || 'sans-serif'}`;
+      const w = ctx.measureText(tx.text).width;
+      ctx.restore();
+      return { x: tx.x, y: tx.y, w: Math.max(w, tx.size * 0.4), h: tx.size };
+    }
+
+    function drawTextElement(tx) {
+      ctx.save();
+      ctx.font = `bold ${tx.size}px ${tx.font || 'sans-serif'}`;
+      ctx.fillStyle = tx.color || '#000000';
       ctx.textAlign = 'left';
       ctx.textBaseline = 'top';
       ctx.globalCompositeOperation = 'source-over';
-      ctx.fillText(text, x, y);
+      ctx.fillText(tx.text, tx.x, tx.y);
       ctx.restore();
+    }
+
+    function drawTextHandles(tx) {
+      const b = getTextBounds(tx);
+      const pad = 4 / view.zoom;
+      const hs  = 10 / view.zoom; // handle size in world units
+
+      ctx.save();
+      applyViewTransform();
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.strokeStyle = '#7c3aed';
+      ctx.lineWidth = 1.5 / view.zoom;
+      ctx.setLineDash([5 / view.zoom, 3 / view.zoom]);
+      ctx.strokeRect(b.x - pad, b.y - pad, b.w + 2 * pad, b.h + 2 * pad);
+      ctx.setLineDash([]);
+      // Resize handle (bottom-right corner)
+      const hx = b.x + b.w + pad - hs / 2;
+      const hy = b.y + b.h + pad - hs / 2;
+      ctx.fillStyle = '#7c3aed';
+      ctx.fillRect(hx, hy, hs, hs);
+      // Drag icon hint (small cross in center of bounding box)
+      ctx.restore();
+    }
+
+    function hitTestTextHandle(wx, wy) {
+      const r = 12 / view.zoom;
+      for (let i = allTexts.length - 1; i >= 0; i--) {
+        const b   = getTextBounds(allTexts[i]);
+        const pad = 4 / view.zoom;
+        const hx  = b.x + b.w + pad;
+        const hy  = b.y + b.h + pad;
+        if (Math.abs(wx - hx) <= r && Math.abs(wy - hy) <= r) return i;
+      }
+      return -1;
+    }
+
+    function hitTestText(wx, wy) {
+      for (let i = allTexts.length - 1; i >= 0; i--) {
+        const b   = getTextBounds(allTexts[i]);
+        const pad = 4 / view.zoom;
+        if (wx >= b.x - pad && wx <= b.x + b.w + pad &&
+            wy >= b.y - pad && wy <= b.y + b.h + pad) return i;
+      }
+      return -1;
     }
 
     function placeTextAt(sx, sy) {
       const { x, y } = screenToWorld(sx, sy);
       const fontSize = Math.max(12, brushSize * 5);
       const screenFontSize = fontSize * view.zoom;
+      const fontFamily = currentFont;
+      const color = textColor;
 
       const span = document.createElement('span');
       span.contentEditable = 'true';
@@ -574,11 +703,11 @@
         `top:${sy}px`,
         `z-index:60`,
         `border:none`,
-        `outline:1px dashed #7c3aed`,
+        `outline:1.5px dashed #7c3aed`,
         `background:transparent`,
         `padding:0 2px`,
-        `font:bold ${screenFontSize}px sans-serif`,
-        `color:${currentColor}`,
+        `font:bold ${screenFontSize}px ${fontFamily}`,
+        `color:${color}`,
         `min-width:4px`,
         `white-space:nowrap`,
         `line-height:1`,
@@ -594,10 +723,12 @@
         const text = span.textContent.trim();
         span.remove();
         if (!text) return;
-        const textEl = { x, y, text, color: currentColor, size: fontSize };
+        const textEl = { id: null, x, y, text, color, size: fontSize, font: fontFamily };
         allTexts.push(textEl);
         redrawAll();
-        socket.emit('text-place', textEl);
+        socket.emit('text-place', { x, y, text, color, size: fontSize, font: fontFamily }, (res) => {
+          if (res && res.id != null) textEl.id = res.id;
+        });
       }
 
       span.addEventListener('keydown', (e) => {
@@ -607,8 +738,12 @@
       span.addEventListener('blur', commitText);
     }
 
+    function emitTextUpdate(tx) {
+      if (tx.id == null) return;
+      socket.emit('text-update', { id: tx.id, x: tx.x, y: tx.y, text: tx.text, color: tx.color, size: tx.size, font: tx.font });
+    }
+
     // ---- Drawing ----
-    // drawSegment operates in world coords with applyViewTransform() already set.
     function drawSegment(x1, y1, x2, y2, color, width, tool) {
       ctx.beginPath();
       if (tool === 'eraser') {
@@ -664,8 +799,12 @@
       for (const st of allStamps) {
         drawEmojiStamp(st.x, st.y, st.emoji, st.size);
       }
-      for (const tx of allTexts) {
-        drawTextElement(tx.x, tx.y, tx.text, tx.color, tx.size);
+      for (let i = 0; i < allTexts.length; i++) {
+        drawTextElement(allTexts[i]);
+        const showHandle = (i === hoveredTextIdx)
+          || (draggingText !== null && draggingText.idx === i)
+          || (resizingText !== null && resizingText.idx === i);
+        if (showHandle) drawTextHandles(allTexts[i]);
       }
       updateRemoteCursorPositions();
     }
@@ -691,33 +830,118 @@
       canvas.classList.toggle('tool-pan', currentTool === 'pan' || spaceDown);
     }
 
+    // ---- Canvas mouse events ----
     canvas.addEventListener('mousedown', (e) => {
       if (e.button === 1 || (e.button === 0 && (spaceDown || currentTool === 'pan'))) {
         e.preventDefault(); startPan(e.clientX, e.clientY); return;
       }
       if (e.button === 0) {
         e.preventDefault();
+        const { x: wx, y: wy } = screenToWorld(e.clientX, e.clientY);
+
+        // Text resize handle (highest priority)
+        const rIdx = hitTestTextHandle(wx, wy);
+        if (rIdx >= 0) {
+          hoveredTextIdx = rIdx;
+          resizingText = { idx: rIdx, startWX: wx, startWY: wy, startSize: allTexts[rIdx].size };
+          canvas.style.cursor = 'nwse-resize';
+          return;
+        }
+        // Text body drag
+        const dIdx = hitTestText(wx, wy);
+        if (dIdx >= 0) {
+          hoveredTextIdx = dIdx;
+          const tx = allTexts[dIdx];
+          draggingText = { idx: dIdx, startWX: wx, startWY: wy, startX: tx.x, startY: tx.y };
+          canvas.style.cursor = 'grabbing';
+          redrawAll();
+          return;
+        }
+
         if (currentTool === 'emoji') { placeStamp(e.clientX, e.clientY); return; }
-        if (currentTool === 'text') { placeTextAt(e.clientX, e.clientY); return; }
+        if (currentTool === 'text')  { placeTextAt(e.clientX, e.clientY); return; }
         beginStroke(e.clientX, e.clientY);
       }
     });
+
     canvas.addEventListener('mousemove', (e) => {
       if (isPanning) { updatePan(e.clientX, e.clientY); return; }
-      const { x, y } = screenToWorld(e.clientX, e.clientY);
-      socket.emit('cursor-move', { x, y });
-      if (currentTool === 'emoji') { updateEmojiGhost(e.clientX, e.clientY); return; }
-      if (currentTool === 'text') return;
+      const { x: wx, y: wy } = screenToWorld(e.clientX, e.clientY);
+      socket.emit('cursor-move', { x: wx, y: wy });
+
+      if (currentTool === 'emoji') { updateEmojiGhost(e.clientX, e.clientY); }
+
+      // Skip stroke drawing while dragging/resizing text (handled by window listener)
+      if (draggingText !== null || resizingText !== null) return;
+
+      // Update hover highlight
+      const prevHover = hoveredTextIdx;
+      const hIdx = hitTestTextHandle(wx, wy);
+      hoveredTextIdx = (hIdx >= 0) ? hIdx : hitTestText(wx, wy);
+      if (hoveredTextIdx !== prevHover) redrawAll();
+
+      // Update cursor
+      if (hIdx >= 0) {
+        canvas.style.cursor = 'nwse-resize';
+      } else if (hoveredTextIdx >= 0) {
+        canvas.style.cursor = 'grab';
+      } else if (currentTool === 'text') {
+        canvas.style.cursor = 'text';
+      } else if (currentTool === 'pan' || spaceDown) {
+        canvas.style.cursor = '';
+      } else {
+        canvas.style.cursor = 'crosshair';
+      }
+
+      if (currentTool === 'emoji' || currentTool === 'text') return;
       continueStroke(e.clientX, e.clientY);
     });
-    canvas.addEventListener('mouseup',    (e) => { if (isPanning) { stopPan(); return; } if (e.button === 0) endStroke(); });
-    canvas.addEventListener('mouseleave', ()  => {
-      if (isPanning) return;
+
+    canvas.addEventListener('mouseleave', () => {
+      if (isPanning || draggingText !== null || resizingText !== null) return;
+      hoveredTextIdx = -1;
       if (currentTool === 'emoji') { emojiGhost.style.display = 'none'; return; }
       if (currentTool === 'text') return;
       endStroke();
     });
-    window.addEventListener('mouseup',    (e) => { if (e.button === 1 && isPanning) stopPan(); });
+
+    // Window-level handlers for drag/resize (allows moving outside canvas) and pan
+    window.addEventListener('mousemove', (e) => {
+      if (draggingText !== null) {
+        const { x: wx, y: wy } = screenToWorld(e.clientX, e.clientY);
+        const tx = allTexts[draggingText.idx];
+        tx.x = draggingText.startX + (wx - draggingText.startWX);
+        tx.y = draggingText.startY + (wy - draggingText.startWY);
+        redrawAll();
+      }
+      if (resizingText !== null) {
+        const { x: wx, y: wy } = screenToWorld(e.clientX, e.clientY);
+        const tx = allTexts[resizingText.idx];
+        const delta = (wx - resizingText.startWX) + (wy - resizingText.startWY);
+        tx.size = Math.max(8, resizingText.startSize + delta);
+        redrawAll();
+      }
+    });
+
+    window.addEventListener('mouseup', (e) => {
+      if (e.button === 1 && isPanning) { stopPan(); return; }
+      if (e.button === 0) {
+        if (draggingText !== null) {
+          emitTextUpdate(allTexts[draggingText.idx]);
+          draggingText = null;
+          canvas.style.cursor = '';
+          redrawAll();
+        }
+        if (resizingText !== null) {
+          emitTextUpdate(allTexts[resizingText.idx]);
+          resizingText = null;
+          canvas.style.cursor = '';
+          redrawAll();
+        }
+        // endStroke is also fine to call (no-op if not drawing)
+        endStroke();
+      }
+    });
 
     // ---- Scroll to zoom ----
     canvas.addEventListener('wheel', (e) => {
@@ -761,7 +985,7 @@
       if (e.touches.length >= 2) {
         if (isDrawing) cancelStroke();
         activeTouchId = null; isPanTouch = false; touchPanOrigin = null;
-        isPinching    = true;
+        isPinching = true;
         lastPinchDist = touchDist(e.touches[0], e.touches[1]);
         const m = touchMid(e.touches[0], e.touches[1]);
         lastPinchCX = m.x; lastPinchCY = m.y;
@@ -776,12 +1000,28 @@
         } else if (currentTool === 'emoji') {
           isPanTouch = false;
           placeStamp(t.clientX, t.clientY);
-        } else if (currentTool === 'text') {
-          isPanTouch = false;
-          placeTextAt(t.clientX, t.clientY);
         } else {
-          isPanTouch = false;
-          beginStroke(t.clientX, t.clientY);
+          const { x: wx, y: wy } = screenToWorld(t.clientX, t.clientY);
+          const rIdx = hitTestTextHandle(wx, wy);
+          if (rIdx >= 0) {
+            isPanTouch = false;
+            resizingText = { idx: rIdx, startWX: wx, startWY: wy, startSize: allTexts[rIdx].size };
+          } else {
+            const dIdx = hitTestText(wx, wy);
+            if (dIdx >= 0) {
+              isPanTouch = false;
+              const tx = allTexts[dIdx];
+              draggingText = { idx: dIdx, startWX: wx, startWY: wy, startX: tx.x, startY: tx.y };
+              hoveredTextIdx = dIdx;
+              redrawAll();
+            } else if (currentTool === 'text') {
+              isPanTouch = false;
+              placeTextAt(t.clientX, t.clientY);
+            } else {
+              isPanTouch = false;
+              beginStroke(t.clientX, t.clientY);
+            }
+          }
         }
       }
     }, { passive: false });
@@ -791,7 +1031,6 @@
       if (e.touches.length >= 2 && isPinching) {
         const dist = touchDist(e.touches[0], e.touches[1]);
         const m    = touchMid(e.touches[0], e.touches[1]);
-        // Zoom: keep world point under previous center fixed at current center
         const wx = (lastPinchCX - view.panX) / view.zoom;
         const wy = (lastPinchCY - view.panY) / view.zoom;
         view.zoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, view.zoom * dist / lastPinchDist));
@@ -802,7 +1041,19 @@
       }
       for (const t of e.changedTouches) {
         if (t.identifier !== activeTouchId) continue;
-        if (isPanTouch && touchPanOrigin) {
+        if (draggingText !== null) {
+          const { x: wx, y: wy } = screenToWorld(t.clientX, t.clientY);
+          const tx = allTexts[draggingText.idx];
+          tx.x = draggingText.startX + (wx - draggingText.startWX);
+          tx.y = draggingText.startY + (wy - draggingText.startWY);
+          redrawAll();
+        } else if (resizingText !== null) {
+          const { x: wx, y: wy } = screenToWorld(t.clientX, t.clientY);
+          const tx = allTexts[resizingText.idx];
+          const delta = (wx - resizingText.startWX) + (wy - resizingText.startWY);
+          tx.size = Math.max(8, resizingText.startSize + delta);
+          redrawAll();
+        } else if (isPanTouch && touchPanOrigin) {
           view.panX = touchPanOrigin.px + t.clientX - touchPanOrigin.tx;
           view.panY = touchPanOrigin.py + t.clientY - touchPanOrigin.ty;
           redrawAll();
@@ -818,13 +1069,23 @@
       for (const t of e.changedTouches) {
         if (t.identifier !== activeTouchId) continue;
         activeTouchId = null;
-        if (isPanTouch) { isPanTouch = false; touchPanOrigin = null; }
-        else endStroke();
+        if (draggingText !== null) {
+          emitTextUpdate(allTexts[draggingText.idx]);
+          draggingText = null; hoveredTextIdx = -1; redrawAll();
+        } else if (resizingText !== null) {
+          emitTextUpdate(allTexts[resizingText.idx]);
+          resizingText = null; hoveredTextIdx = -1; redrawAll();
+        } else if (isPanTouch) {
+          isPanTouch = false; touchPanOrigin = null;
+        } else {
+          endStroke();
+        }
         break;
       }
     });
     canvas.addEventListener('touchcancel', () => {
       isPinching = false; activeTouchId = null; isPanTouch = false; touchPanOrigin = null;
+      draggingText = null; resizingText = null; hoveredTextIdx = -1;
       cancelStroke();
     });
 
@@ -842,7 +1103,10 @@
           x: s.points[0].x, y: s.points[0].y, emoji: s.emoji, size: s.width,
         }));
         allTexts = strokes.filter(s => s.tool === 'text').map(s => ({
-          x: s.points[0].x, y: s.points[0].y, text: s.emoji, color: s.color, size: s.width,
+          id: s.id,
+          x: s.points[0].x, y: s.points[0].y,
+          text: s.emoji, color: s.color, size: s.width,
+          font: s.font || FONTS[0].value,
         }));
         redrawAll();
       } catch (err) { console.error('Failed to load strokes:', err); }
@@ -868,9 +1132,7 @@
       if (r) { allStrokes.push({ color: r.color, width: r.width, points: r.points, tool: r.tool }); remoteStrokes.delete(data.socketId); }
     });
     socket.on('board-cleared', () => {
-      allStrokes = [];
-      allStamps  = [];
-      allTexts   = [];
+      allStrokes = []; allStamps = []; allTexts = [];
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       applyViewTransform();
@@ -884,12 +1146,24 @@
 
     // ---- Socket.IO text events ----
     socket.on('text-place', (data) => {
-      allTexts.push({ x: data.x, y: data.y, text: data.text, color: data.color, size: data.size });
+      allTexts.push({
+        id:   data.id,
+        x:    data.x,    y:    data.y,
+        text: data.text, color: data.color,
+        size: data.size, font: data.font || FONTS[0].value,
+      });
+      redrawAll();
+    });
+
+    socket.on('text-update', (data) => {
+      const tx = allTexts.find(t => t.id === data.id);
+      if (!tx) return;
+      tx.x = data.x; tx.y = data.y;
+      tx.size = data.size; tx.font = data.font; tx.color = data.color;
       redrawAll();
     });
 
     // ---- Remote cursors ----
-    // Stored in world coords; repositioned to screen coords whenever view changes.
     function updateRemoteCursorPositions() {
       remoteCursorWorld.forEach((wd, id) => {
         const el = remoteCursors.get(id);
@@ -927,7 +1201,7 @@
 
     // ---- Keyboard shortcuts ----
     document.addEventListener('keydown', (e) => {
-      if (e.target.matches('input,textarea') || e.target.isContentEditable) return;
+      if (e.target.matches('input,textarea,select') || e.target.isContentEditable) return;
       if (e.key === 'p' || e.key === 'b') { setTool('pen'); return; }
       if (e.key === 'e') { setTool('eraser'); return; }
       if (e.key === 'h') { setTool('pan'); return; }

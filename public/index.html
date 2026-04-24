@@ -214,6 +214,26 @@
     }
     #zoom-label.visible { opacity: 1; }
 
+    #bg-color-picker-wrapper {
+      position: relative; width: 32px; height: 32px; flex-shrink: 0;
+      border-radius: 6px; overflow: hidden;
+      border: 2px solid rgba(161,161,170,0.4); cursor: pointer;
+    }
+    #bg-color-picker-wrapper input {
+      position: absolute; top: -4px; left: -4px;
+      width: 40px; height: 40px; border: none; padding: 0; cursor: pointer;
+    }
+    .bg-label {
+      font-size: 9px; font-weight: 700; color: #a1a1aa;
+      text-transform: uppercase; letter-spacing: 0.04em;
+      flex-shrink: 0; align-self: center;
+    }
+
+    @media (max-width: 480px) {
+      #bg-color-picker-wrapper { width: 26px; height: 26px; }
+      #bg-color-picker-wrapper input { width: 34px; height: 34px; }
+    }
+
     #whiteboard.tool-emoji { cursor: none; }
     #whiteboard.tool-label { cursor: crosshair; }
     #emoji-ghost {
@@ -322,6 +342,21 @@
 
     <div class="separator"></div>
 
+    <span class="bg-label">BG</span>
+    <div id="bg-color-picker-wrapper" title="Background color">
+      <input type="color" id="bg-color-picker" value="#ffffff">
+    </div>
+    <div style="display:flex;gap:5px;flex-shrink:0;">
+      <div class="bg-swatch" data-bg="#ffffff"  style="width:24px;height:24px;border-radius:4px;background:#ffffff;cursor:pointer;border:2px solid #d4d4d8;flex-shrink:0"></div>
+      <div class="bg-swatch" data-bg="#f4f4f5"  style="width:24px;height:24px;border-radius:4px;background:#f4f4f5;cursor:pointer;border:2px solid transparent;flex-shrink:0"></div>
+      <div class="bg-swatch" data-bg="#fef9c3"  style="width:24px;height:24px;border-radius:4px;background:#fef9c3;cursor:pointer;border:2px solid transparent;flex-shrink:0"></div>
+      <div class="bg-swatch" data-bg="#dbeafe"  style="width:24px;height:24px;border-radius:4px;background:#dbeafe;cursor:pointer;border:2px solid transparent;flex-shrink:0"></div>
+      <div class="bg-swatch" data-bg="#1e293b"  style="width:24px;height:24px;border-radius:4px;background:#1e293b;cursor:pointer;border:2px solid transparent;flex-shrink:0"></div>
+      <div class="bg-swatch" data-bg="#09090b"  style="width:24px;height:24px;border-radius:4px;background:#09090b;cursor:pointer;border:2px solid transparent;flex-shrink:0"></div>
+    </div>
+
+    <div class="separator"></div>
+
     <button id="btn-reset-view" title="Reset view (0)">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/>
@@ -414,6 +449,7 @@
     // ---- App state ----
     let currentTool = 'pen'; // 'pen' | 'eraser' | 'pan' | 'emoji'
     let currentColor = '#000000';
+    let bgColor = '#ffffff';
     let brushSize = 3;
     let isDrawing = false;
     let lastWX = 0, lastWY = 0;
@@ -513,13 +549,22 @@
       brushSize = parseInt(e.target.value);
       sizeLabel.textContent = brushSize;
     });
+
+    document.getElementById('bg-color-picker').addEventListener('input', (e) => {
+      applyBgColor(e.target.value);
+    });
+    document.querySelectorAll('.bg-swatch').forEach(s => {
+      s.addEventListener('click', () => applyBgColor(s.dataset.bg));
+    });
     clearBtn.addEventListener('click', async () => {
       const res = await fetch('/api/clear', { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers } });
       if (res.ok) {
         allStrokes = [];
         allStamps = [];
+        allLabels = [];
         ctx.setTransform(1, 0, 0, 1, 0, 0);
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = bgColor;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
         applyViewTransform();
       }
     });
@@ -640,10 +685,24 @@
     }
     function cancelStroke() { isDrawing = false; currentStrokePoints = []; }
 
+    // ---- Background color ----
+    function applyBgColor(color) {
+      bgColor = color;
+      document.body.style.background = color;
+      document.getElementById('bg-color-picker').value = color;
+      document.getElementById('bg-color-picker-wrapper').style.borderColor =
+        color === '#ffffff' ? 'rgba(161,161,170,0.4)' : color;
+      document.querySelectorAll('.bg-swatch').forEach(s => {
+        s.style.border = s.dataset.bg === color ? '2px solid #7c3aed' : (s.dataset.bg === '#ffffff' ? '2px solid #d4d4d8' : '2px solid transparent');
+      });
+      redrawAll();
+    }
+
     // ---- Redraw ----
     function redrawAll() {
       ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = bgColor;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
       applyViewTransform();
       for (const s of allStrokes) {
         if (s.points.length < 2) continue;
@@ -862,7 +921,8 @@
       allStamps  = [];
       allLabels  = [];
       ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = bgColor;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
       applyViewTransform();
     });
 

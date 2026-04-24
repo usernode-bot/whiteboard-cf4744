@@ -1,0 +1,1150 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>IQ 1000 — Intelligence Quotient Test</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #09090b;
+      --surface:  #18181b;
+      --surface2: #27272a;
+      --border:   #3f3f46;
+      --text:     #fafafa;
+      --muted:    #a1a1aa;
+      --accent:   #818cf8;
+      --accent2:  #6366f1;
+      --green:    #34d399;
+      --red:      #f87171;
+      --yellow:   #fbbf24;
+      --radius:   14px;
+    }
+
+    html, body {
+      min-height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      line-height: 1.5;
+    }
+
+    /* ── Scrollbar ── */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+    /* ── Layout ── */
+    #app {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .screen { display: none; width: 100%; max-width: 680px; }
+    .screen.active { display: block; }
+
+    /* ── Welcome Screen ── */
+    #welcome-screen {
+      text-align: center;
+    }
+    .logo-ring {
+      width: 100px; height: 100px;
+      margin: 0 auto 28px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #4f46e5, #818cf8);
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 0 0 16px rgba(99,102,241,0.1), 0 0 0 32px rgba(99,102,241,0.05);
+      font-size: 42px;
+    }
+    .welcome-title {
+      font-size: clamp(2.2rem, 6vw, 3.2rem);
+      font-weight: 800;
+      letter-spacing: -1.5px;
+      background: linear-gradient(135deg, #fff 40%, #818cf8);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 14px;
+    }
+    .welcome-subtitle {
+      color: var(--muted);
+      font-size: 1.05rem;
+      max-width: 420px;
+      margin: 0 auto 36px;
+    }
+    .stat-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin-bottom: 36px;
+    }
+    .stat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 18px 12px;
+    }
+    .stat-card .num { font-size: 1.6rem; font-weight: 700; color: var(--accent); }
+    .stat-card .lbl { font-size: 0.75rem; color: var(--muted); margin-top: 2px; }
+
+    /* ── Buttons ── */
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+      padding: 14px 32px;
+      border: none; border-radius: 10px;
+      font-size: 1rem; font-weight: 600;
+      cursor: pointer; transition: all 0.15s; user-select: none;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, var(--accent2), var(--accent));
+      color: #fff;
+      box-shadow: 0 4px 20px rgba(99,102,241,0.4);
+    }
+    .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 6px 28px rgba(99,102,241,0.5); }
+    .btn-primary:active { transform: translateY(0); }
+    .btn-secondary {
+      background: var(--surface2);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+    .btn-secondary:hover { background: var(--border); }
+    .btn-full { width: 100%; }
+    .btn-lg { padding: 16px 40px; font-size: 1.1rem; }
+
+    /* ── Quiz Screen ── */
+    .quiz-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 24px; gap: 12px;
+    }
+    .iq-badge {
+      display: flex; flex-direction: column; align-items: center;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 10px 18px;
+      min-width: 100px;
+    }
+    .iq-badge .iq-label { font-size: 0.65rem; font-weight: 600; letter-spacing: 1px; color: var(--muted); text-transform: uppercase; }
+    .iq-badge .iq-value {
+      font-size: 2rem; font-weight: 800; letter-spacing: -1px;
+      color: var(--accent);
+      transition: color 0.4s;
+    }
+    .iq-value.up   { color: var(--green) !important; }
+    .iq-value.down { color: var(--red)   !important; }
+
+    .quiz-meta {
+      flex: 1;
+      display: flex; flex-direction: column; align-items: center; gap: 6px;
+    }
+    .q-counter { font-size: 0.8rem; color: var(--muted); }
+    .progress-bar {
+      width: 100%; height: 6px;
+      background: var(--surface2);
+      border-radius: 3px; overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent2), var(--accent));
+      border-radius: 3px;
+      transition: width 0.4s ease;
+    }
+
+    .difficulty-badge {
+      display: flex; align-items: center; gap: 6px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 8px 14px;
+      font-size: 0.78rem; font-weight: 600;
+    }
+    .diff-dots { display: flex; gap: 3px; }
+    .diff-dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: var(--surface2);
+    }
+    .diff-dot.on { background: var(--accent); }
+
+    /* ── Question Card ── */
+    .question-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 32px 28px;
+      margin-bottom: 16px;
+      position: relative;
+      overflow: hidden;
+    }
+    .question-card::before {
+      content: '';
+      position: absolute; top: 0; left: 0; right: 0; height: 3px;
+      background: linear-gradient(90deg, var(--accent2), var(--accent));
+    }
+    .q-type-tag {
+      display: inline-block;
+      font-size: 0.7rem; font-weight: 600; letter-spacing: 0.8px;
+      text-transform: uppercase; color: var(--accent);
+      margin-bottom: 14px;
+    }
+    .q-text {
+      font-size: clamp(1rem, 2.5vw, 1.18rem);
+      font-weight: 500;
+      line-height: 1.6;
+      color: var(--text);
+    }
+    .q-pattern {
+      font-family: 'Courier New', monospace;
+      font-size: 1.4rem;
+      color: var(--accent);
+      margin: 12px 0;
+      letter-spacing: 2px;
+    }
+
+    /* ── Answer Options ── */
+    .options-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+    @media (max-width: 480px) { .options-grid { grid-template-columns: 1fr; } }
+
+    .option-btn {
+      display: flex; align-items: center; gap: 12px;
+      padding: 14px 16px;
+      background: var(--surface2);
+      border: 2px solid var(--border);
+      border-radius: 12px;
+      color: var(--text);
+      font-size: 0.95rem;
+      font-weight: 500;
+      cursor: pointer;
+      text-align: left;
+      transition: all 0.15s;
+    }
+    .option-btn:hover:not(:disabled) {
+      border-color: var(--accent);
+      background: rgba(99,102,241,0.1);
+    }
+    .option-letter {
+      width: 28px; height: 28px;
+      border-radius: 8px;
+      background: var(--border);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.75rem; font-weight: 700;
+      flex-shrink: 0;
+      transition: all 0.15s;
+    }
+    .option-btn:hover:not(:disabled) .option-letter { background: var(--accent2); }
+
+    /* Answer states */
+    .option-btn.correct {
+      border-color: var(--green);
+      background: rgba(52,211,153,0.12);
+    }
+    .option-btn.correct .option-letter { background: var(--green); color: #000; }
+    .option-btn.wrong {
+      border-color: var(--red);
+      background: rgba(248,113,113,0.1);
+    }
+    .option-btn.wrong .option-letter { background: var(--red); color: #000; }
+    .option-btn:disabled { cursor: default; }
+
+    /* ── Feedback Banner ── */
+    .feedback-banner {
+      display: none;
+      border-radius: 12px;
+      padding: 14px 18px;
+      margin-bottom: 16px;
+      font-size: 0.9rem;
+      line-height: 1.5;
+    }
+    .feedback-banner.correct {
+      display: block;
+      background: rgba(52,211,153,0.1);
+      border: 1px solid rgba(52,211,153,0.3);
+      color: var(--green);
+    }
+    .feedback-banner.wrong {
+      display: block;
+      background: rgba(248,113,113,0.08);
+      border: 1px solid rgba(248,113,113,0.25);
+      color: var(--red);
+    }
+    .feedback-title { font-weight: 700; margin-bottom: 4px; }
+    .feedback-explanation { color: var(--muted); font-size: 0.85rem; }
+
+    /* ── Score delta ── */
+    .score-delta {
+      font-size: 0.75rem; font-weight: 700;
+      margin-top: 2px;
+    }
+    .score-delta.pos { color: var(--green); }
+    .score-delta.neg { color: var(--red); }
+
+    /* ── Result Screen ── */
+    #result-screen { text-align: center; }
+    .result-ring {
+      width: 160px; height: 160px;
+      margin: 0 auto 28px;
+      border-radius: 50%;
+      background: conic-gradient(var(--accent2) var(--pct, 0%), var(--surface2) 0%);
+      display: flex; align-items: center; justify-content: center;
+      position: relative;
+    }
+    .result-ring-inner {
+      width: 130px; height: 130px;
+      border-radius: 50%;
+      background: var(--bg);
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+    }
+    .result-iq { font-size: 2.8rem; font-weight: 800; color: var(--accent); letter-spacing: -2px; }
+    .result-iq-label { font-size: 0.7rem; font-weight: 600; color: var(--muted); letter-spacing: 1px; text-transform: uppercase; }
+
+    .result-title { font-size: 1.8rem; font-weight: 700; margin-bottom: 10px; }
+    .result-desc  { color: var(--muted); font-size: 1rem; max-width: 400px; margin: 0 auto 28px; }
+
+    .result-stats {
+      display: grid; grid-template-columns: repeat(3, 1fr);
+      gap: 12px; margin-bottom: 32px;
+    }
+    .result-stat {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px 10px;
+    }
+    .result-stat .rs-num { font-size: 1.5rem; font-weight: 700; }
+    .result-stat .rs-lbl { font-size: 0.72rem; color: var(--muted); margin-top: 2px; }
+
+    /* ── Animations ── */
+    @keyframes fadeSlideUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .fade-in { animation: fadeSlideUp 0.35s ease both; }
+
+    @keyframes bump {
+      0%   { transform: scale(1); }
+      40%  { transform: scale(1.18); }
+      100% { transform: scale(1); }
+    }
+    .bump { animation: bump 0.35s ease; }
+  </style>
+</head>
+<body>
+<div id="app">
+
+  <!-- ═══════════════════════════════ WELCOME ═══════════════════════════════ -->
+  <div id="welcome-screen" class="screen active">
+    <div class="logo-ring">🧠</div>
+    <h1 class="welcome-title">IQ 1000</h1>
+    <p class="welcome-subtitle">
+      A premium adaptive intelligence test. Your score evolves with every answer —
+      can you reach 1000?
+    </p>
+    <div class="stat-grid">
+      <div class="stat-card"><div class="num">50+</div><div class="lbl">Questions</div></div>
+      <div class="stat-card"><div class="num">5</div><div class="lbl">Difficulty Levels</div></div>
+      <div class="stat-card"><div class="num">∞</div><div class="lbl">Score Ceiling</div></div>
+    </div>
+    <button class="btn btn-primary btn-lg btn-full" onclick="startQuiz()">
+      <span>Start IQ Test</span>
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+    </button>
+    <p style="margin-top:14px;font-size:0.78rem;color:var(--muted)">Adaptive · 20 questions · No time limit</p>
+  </div>
+
+  <!-- ═══════════════════════════════ QUIZ ═══════════════════════════════ -->
+  <div id="quiz-screen" class="screen">
+
+    <!-- Header row -->
+    <div class="quiz-header">
+      <div class="iq-badge">
+        <span class="iq-label">IQ Score</span>
+        <span class="iq-value" id="iq-display">100</span>
+        <span class="score-delta" id="score-delta"></span>
+      </div>
+
+      <div class="quiz-meta">
+        <span class="q-counter" id="q-counter">Question 1 / 20</span>
+        <div class="progress-bar"><div class="progress-fill" id="progress-fill" style="width:5%"></div></div>
+      </div>
+
+      <div class="difficulty-badge" id="diff-badge">
+        <div class="diff-dots">
+          <div class="diff-dot on" id="d1"></div>
+          <div class="diff-dot"    id="d2"></div>
+          <div class="diff-dot"    id="d3"></div>
+          <div class="diff-dot"    id="d4"></div>
+          <div class="diff-dot"    id="d5"></div>
+        </div>
+        <span id="diff-label">Level 1</span>
+      </div>
+    </div>
+
+    <!-- Question card -->
+    <div class="question-card fade-in" id="question-card">
+      <div class="q-type-tag" id="q-type-tag">Number Sequence</div>
+      <div class="q-text" id="q-text"></div>
+      <div class="q-pattern" id="q-pattern"></div>
+    </div>
+
+    <!-- Options -->
+    <div class="options-grid" id="options-grid"></div>
+
+    <!-- Feedback -->
+    <div class="feedback-banner" id="feedback-banner">
+      <div class="feedback-title" id="feedback-title"></div>
+      <div class="feedback-explanation" id="feedback-explanation"></div>
+    </div>
+
+    <!-- Next button -->
+    <button class="btn btn-primary btn-full" id="next-btn" style="display:none" onclick="nextQuestion()">
+      Next Question →
+    </button>
+
+  </div>
+
+  <!-- ═══════════════════════════════ RESULT ═══════════════════════════════ -->
+  <div id="result-screen" class="screen">
+    <div class="result-ring" id="result-ring" style="--pct:50%">
+      <div class="result-ring-inner">
+        <span class="result-iq" id="result-iq-val">100</span>
+        <span class="result-iq-label">IQ</span>
+      </div>
+    </div>
+    <h2 class="result-title" id="result-title">Above Average</h2>
+    <p  class="result-desc"  id="result-desc">You demonstrated solid reasoning skills.</p>
+    <div class="result-stats">
+      <div class="result-stat">
+        <div class="rs-num" id="rs-correct" style="color:var(--green)">0</div>
+        <div class="rs-lbl">Correct</div>
+      </div>
+      <div class="result-stat">
+        <div class="rs-num" id="rs-wrong" style="color:var(--red)">0</div>
+        <div class="rs-lbl">Wrong</div>
+      </div>
+      <div class="result-stat">
+        <div class="rs-num" id="rs-accuracy" style="color:var(--accent)">0%</div>
+        <div class="rs-lbl">Accuracy</div>
+      </div>
+    </div>
+    <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
+      <button class="btn btn-primary btn-lg" onclick="resetQuiz()">Retake Test</button>
+      <button class="btn btn-secondary btn-lg" onclick="showWelcome()">Home</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+//  QUESTION BANK  — 60 questions, 5 difficulty levels
+// ═══════════════════════════════════════════════════════════════
+const QUESTIONS = [
+  // ─── DIFFICULTY 1 ──────────────────────────────────────────
+  {
+    id:1, difficulty:1, type:'Number Sequence',
+    text:'What comes next in the sequence?',
+    pattern:'2, 4, 6, 8, ?',
+    options:['9','10','11','12'],
+    answer:1,
+    explanation:'Each number increases by 2. So 8 + 2 = 10.'
+  },
+  {
+    id:2, difficulty:1, type:'Analogy',
+    text:'Dog is to puppy as cat is to:',
+    pattern:'',
+    options:['Kitten','Cub','Foal','Lamb'],
+    answer:0,
+    explanation:'A puppy is a young dog; a kitten is a young cat.'
+  },
+  {
+    id:3, difficulty:1, type:'Logic',
+    text:'All birds have wings. A robin is a bird. Therefore:',
+    pattern:'',
+    options:['Robins can fly','Robins have wings','Robins lay eggs','Robins are red'],
+    answer:1,
+    explanation:'Direct syllogism: all birds have wings, robin is a bird → robin has wings.'
+  },
+  {
+    id:4, difficulty:1, type:'Math',
+    text:'If you have 3 apples and buy 5 more, then eat 2, how many do you have?',
+    pattern:'',
+    options:['4','6','8','10'],
+    answer:1,
+    explanation:'3 + 5 = 8, then 8 − 2 = 6.'
+  },
+  {
+    id:5, difficulty:1, type:'Pattern Recognition',
+    text:'Which pattern continues the sequence?',
+    pattern:'🔴 🔵 🔴 🔵 🔴 ?',
+    options:['🔴','🔵','🟢','🟡'],
+    answer:1,
+    explanation:'The pattern alternates: red, blue, red, blue — so the next is blue.'
+  },
+  {
+    id:6, difficulty:1, type:'Number Sequence',
+    text:'What is the missing number?',
+    pattern:'1, 3, 5, 7, ?, 11',
+    options:['8','9','10','12'],
+    answer:1,
+    explanation:'Odd numbers in sequence: 1, 3, 5, 7, 9, 11.'
+  },
+  {
+    id:7, difficulty:1, type:'Analogy',
+    text:'Hot is to cold as day is to:',
+    pattern:'',
+    options:['Warm','Sun','Night','Time'],
+    answer:2,
+    explanation:'Hot and cold are opposites; day and night are opposites.'
+  },
+  {
+    id:8, difficulty:1, type:'Spatial',
+    text:'A square has 4 sides. A triangle has 3 sides. How many sides do they have together?',
+    pattern:'',
+    options:['5','6','7','8'],
+    answer:2,
+    explanation:'4 + 3 = 7 sides in total.'
+  },
+  {
+    id:9, difficulty:1, type:'Pattern Recognition',
+    text:'Which letter continues the pattern?',
+    pattern:'A, C, E, G, ?',
+    options:['H','I','J','K'],
+    answer:1,
+    explanation:'Skip every other letter: A(skip B) C(skip D) E(skip F) G(skip H) → I.'
+  },
+  {
+    id:10, difficulty:1, type:'Logic',
+    text:'Some cats are black. Whiskers is a cat. Which must be true?',
+    pattern:'',
+    options:['Whiskers is black','Whiskers might be black','Whiskers is white','Whiskers is not black'],
+    answer:1,
+    explanation:'"Some cats are black" means Whiskers might or might not be black — only the possibility is certain.'
+  },
+  {
+    id:11, difficulty:1, type:'Math',
+    text:'What is 15% of 200?',
+    pattern:'',
+    options:['25','30','35','45'],
+    answer:1,
+    explanation:'15% × 200 = 0.15 × 200 = 30.'
+  },
+  {
+    id:12, difficulty:1, type:'Number Sequence',
+    text:'What comes next?',
+    pattern:'10, 20, 30, 40, ?',
+    options:['45','48','50','55'],
+    answer:2,
+    explanation:'Counting by tens: 40 + 10 = 50.'
+  },
+
+  // ─── DIFFICULTY 2 ──────────────────────────────────────────
+  {
+    id:13, difficulty:2, type:'Number Sequence',
+    text:'Find the next number in the sequence.',
+    pattern:'1, 4, 9, 16, 25, ?',
+    options:['30','34','36','42'],
+    answer:2,
+    explanation:'These are perfect squares: 1², 2², 3², 4², 5², 6² = 36.'
+  },
+  {
+    id:14, difficulty:2, type:'Analogy',
+    text:'Pen is to writer as brush is to:',
+    pattern:'',
+    options:['Sculptor','Painter','Musician','Dancer'],
+    answer:1,
+    explanation:'A pen is the tool of a writer; a brush is the tool of a painter.'
+  },
+  {
+    id:15, difficulty:2, type:'Logic',
+    text:'If no fish are mammals and all dolphins are mammals, then:',
+    pattern:'',
+    options:['Dolphins are fish','Some fish are dolphins','No dolphins are fish','Some dolphins are fish'],
+    answer:2,
+    explanation:'No fish are mammals + all dolphins are mammals → no dolphins can be fish.'
+  },
+  {
+    id:16, difficulty:2, type:'Pattern Recognition',
+    text:'What comes next in the pattern?',
+    pattern:'2, 6, 18, 54, ?',
+    options:['108','118','162','168'],
+    answer:2,
+    explanation:'Each term is multiplied by 3: 2×3=6, 6×3=18, 18×3=54, 54×3=162.'
+  },
+  {
+    id:17, difficulty:2, type:'Math',
+    text:'A train travels 60 km/h for 2.5 hours. How far does it travel?',
+    pattern:'',
+    options:['120 km','140 km','150 km','180 km'],
+    answer:2,
+    explanation:'Distance = speed × time = 60 × 2.5 = 150 km.'
+  },
+  {
+    id:18, difficulty:2, type:'Spatial',
+    text:'A cube has 6 faces. If you remove one corner, how many faces does the object now have (the cut creates a new triangular face)?',
+    pattern:'',
+    options:['6','7','8','9'],
+    answer:1,
+    explanation:'Original 6 faces remain (each slightly changed) + 1 new triangular face from the cut = 7 faces.'
+  },
+  {
+    id:19, difficulty:2, type:'Number Sequence',
+    text:'What is the missing value?',
+    pattern:'3, 6, 12, ?, 48',
+    options:['18','24','30','36'],
+    answer:1,
+    explanation:'Each term doubles: 3, 6, 12, 24, 48.'
+  },
+  {
+    id:20, difficulty:2, type:'Analogy',
+    text:'Gloves are to hands as hat is to:',
+    pattern:'',
+    options:['Head','Hair','Neck','Ears'],
+    answer:0,
+    explanation:'Gloves cover hands; a hat covers the head.'
+  },
+  {
+    id:21, difficulty:2, type:'Logic',
+    text:'All squares are rectangles. Shape X is a square. Which is true?',
+    pattern:'',
+    options:['X is a rectangle','X is not a rectangle','X might be a rectangle','X is a circle'],
+    answer:0,
+    explanation:'Since all squares are rectangles and X is a square, X must be a rectangle.'
+  },
+  {
+    id:22, difficulty:2, type:'Math',
+    text:'What is √169?',
+    pattern:'',
+    options:['11','12','13','14'],
+    answer:2,
+    explanation:'13 × 13 = 169, so √169 = 13.'
+  },
+  {
+    id:23, difficulty:2, type:'Pattern Recognition',
+    text:'Find the odd one out.',
+    pattern:'',
+    options:['25','36','42','49'],
+    answer:2,
+    explanation:'25=5², 36=6², 49=7² are all perfect squares. 42 is not a perfect square.'
+  },
+  {
+    id:24, difficulty:2, type:'Number Sequence',
+    text:'What comes next?',
+    pattern:'31, 28, 31, 30, 31, ?',
+    options:['28','30','31','32'],
+    answer:1,
+    explanation:'These are the days in each month (Jan–Jun): 31,28,31,30,31,30 (June has 30 days).'
+  },
+
+  // ─── DIFFICULTY 3 ──────────────────────────────────────────
+  {
+    id:25, difficulty:3, type:'Number Sequence',
+    text:'What is the next number?',
+    pattern:'1, 1, 2, 3, 5, 8, 13, ?',
+    options:['18','20','21','22'],
+    answer:2,
+    explanation:'Fibonacci sequence — each term is the sum of the two before it: 8+13=21.'
+  },
+  {
+    id:26, difficulty:3, type:'Logic',
+    text:'If A > B, B > C, and C > D, which must be true?',
+    pattern:'',
+    options:['B > D','A < D','A = D','C > A'],
+    answer:0,
+    explanation:'By transitivity: A>B>C>D, therefore B>D.'
+  },
+  {
+    id:27, difficulty:3, type:'Analogy',
+    text:'Symphony is to composer as painting is to:',
+    pattern:'',
+    options:['Canvas','Gallery','Brush','Painter'],
+    answer:3,
+    explanation:'A symphony is created by a composer; a painting is created by a painter.'
+  },
+  {
+    id:28, difficulty:3, type:'Math',
+    text:'If 3x + 7 = 22, what is the value of x?',
+    pattern:'',
+    options:['3','4','5','6'],
+    answer:2,
+    explanation:'3x = 22−7 = 15, so x = 15÷3 = 5.'
+  },
+  {
+    id:29, difficulty:3, type:'Pattern Recognition',
+    text:'Which number replaces the question mark?',
+    pattern:'4 → 16 → 256\n3 → 9 → ?',
+    options:['27','54','81','243'],
+    answer:2,
+    explanation:'Pattern: n → n² → n⁴. So 3 → 9 → 81.'
+  },
+  {
+    id:30, difficulty:3, type:'Logic',
+    text:'In a group of 50 people, 30 speak French and 25 speak German. At least how many speak both?',
+    pattern:'',
+    options:['0','5','10','15'],
+    answer:1,
+    explanation:'30+25=55 speakers total for 50 people. Minimum overlap = 55−50 = 5.'
+  },
+  {
+    id:31, difficulty:3, type:'Spatial',
+    text:'A 3×3×3 cube is painted on all outer surfaces then cut into 27 unit cubes. How many small cubes have exactly 2 painted faces?',
+    pattern:'',
+    options:['8','12','16','20'],
+    answer:1,
+    explanation:'The 12 edge cubes (not corners) have exactly 2 painted faces.'
+  },
+  {
+    id:32, difficulty:3, type:'Number Sequence',
+    text:'Find the pattern and next value.',
+    pattern:'2, 5, 11, 23, 47, ?',
+    options:['89','93','95','99'],
+    answer:2,
+    explanation:'Each term: multiply by 2 and add 1. 47×2+1=95.'
+  },
+  {
+    id:33, difficulty:3, type:'Math',
+    text:'A car depreciates 20% per year. Worth $10,000 now. What is it worth after 2 years?',
+    pattern:'',
+    options:['$6,000','$6,400','$7,200','$8,000'],
+    answer:1,
+    explanation:'After 1 yr: $10,000×0.8=$8,000. After 2 yr: $8,000×0.8=$6,400.'
+  },
+  {
+    id:34, difficulty:3, type:'Analogy',
+    text:'Kilometre is to distance as kilogram is to:',
+    pattern:'',
+    options:['Volume','Speed','Mass','Temperature'],
+    answer:2,
+    explanation:'A kilometre measures distance; a kilogram measures mass.'
+  },
+  {
+    id:35, difficulty:3, type:'Logic',
+    text:'Five people sit in a row: A, B, C, D, E. A is not next to B. B is not next to C. C sits in the middle. Who can sit next to C?',
+    pattern:'',
+    options:['A and B','B and D','A and D','D and E'],
+    answer:2,
+    explanation:'C is in position 3. B cannot be adjacent (pos 2 or 4). A and D can be adjacent.'
+  },
+  {
+    id:36, difficulty:3, type:'Pattern Recognition',
+    text:'Complete the matrix value: if 2→10, 3→15, 4→20, then 7→?',
+    pattern:'',
+    options:['35','42','49','50'],
+    answer:0,
+    explanation:'Rule: n × 5. So 7 × 5 = 35.'
+  },
+
+  // ─── DIFFICULTY 4 ──────────────────────────────────────────
+  {
+    id:37, difficulty:4, type:'Number Sequence',
+    text:'What is the next term?',
+    pattern:'0, 1, 3, 6, 10, 15, 21, ?',
+    options:['25','27','28','30'],
+    answer:2,
+    explanation:'Triangular numbers: differences are 1,2,3,4,5,6,7. So 21+7=28.'
+  },
+  {
+    id:38, difficulty:4, type:'Logic',
+    text:'Some A are B. No B are C. Some C are D. Which is definitely true?',
+    pattern:'',
+    options:['Some A are C','No A are C','Some A are not C','No D are B'],
+    answer:2,
+    explanation:'Since no B are C, the A that are B are certainly not C → some A are not C.'
+  },
+  {
+    id:39, difficulty:4, type:'Math',
+    text:'How many ways can 4 people be seated in a row?',
+    pattern:'',
+    options:['12','16','24','48'],
+    answer:2,
+    explanation:'4! = 4×3×2×1 = 24 permutations.'
+  },
+  {
+    id:40, difficulty:4, type:'Spatial',
+    text:'A clock shows 3:15. What is the angle between the hour and minute hands?',
+    pattern:'',
+    options:['0°','7.5°','15°','22.5°'],
+    answer:1,
+    explanation:'At 3:15: minute hand at 90°. Hour hand at 97.5° (moves 0.5°/min × 15 = 7.5° past 3). Difference = 7.5°.'
+  },
+  {
+    id:41, difficulty:4, type:'Number Sequence',
+    text:'Find the next number in the sequence.',
+    pattern:'2, 3, 5, 7, 11, 13, 17, ?',
+    options:['18','19','20','21'],
+    answer:1,
+    explanation:'This is the sequence of prime numbers. After 17 comes 19.'
+  },
+  {
+    id:42, difficulty:4, type:'Pattern Recognition',
+    text:'In the pattern below, what replaces ?: 1=1, 11=2, 21=3, 1211=4, 111221=5, ?=6',
+    pattern:'',
+    options:['312211','223311','123123','321132'],
+    answer:0,
+    explanation:'"Look-and-say" sequence: describe the previous term. 111221 → one 3, two 1s, two 2s, one 1 → 312211.'
+  },
+  {
+    id:43, difficulty:4, type:'Logic',
+    text:'A liar always lies; a truth-teller always tells the truth. Person X says "I am a liar." What is X?',
+    pattern:'',
+    options:['Liar','Truth-teller','Either is possible','Neither'],
+    answer:2,
+    explanation:'If X is a liar, saying "I\'m a liar" would be truth — contradiction. If truth-teller, it\'s false — contradiction. The statement is a paradox; either label leads to contradiction.'
+  },
+  {
+    id:44, difficulty:4, type:'Math',
+    text:'What is the sum of interior angles of a heptagon (7 sides)?',
+    pattern:'',
+    options:['720°','840°','900°','1080°'],
+    answer:2,
+    explanation:'Sum of interior angles = (n−2)×180° = (7−2)×180° = 5×180° = 900°.'
+  },
+  {
+    id:45, difficulty:4, type:'Analogy',
+    text:'Cartography is to maps as lexicography is to:',
+    pattern:'',
+    options:['Libraries','Dictionaries','Languages','Grammar'],
+    answer:1,
+    explanation:'Cartography is the practice of making maps; lexicography is the practice of compiling dictionaries.'
+  },
+  {
+    id:46, difficulty:4, type:'Spatial',
+    text:'You fold a piece of paper in half 3 times, then cut a hole in the middle. After unfolding, how many holes are there?',
+    pattern:'',
+    options:['3','6','8','9'],
+    answer:2,
+    explanation:'Each fold doubles the layers. After 3 folds there are 8 layers, so 1 cut creates 8 holes when unfolded.'
+  },
+  {
+    id:47, difficulty:4, type:'Number Sequence',
+    text:'What term follows the sequence?',
+    pattern:'1, 2, 6, 24, 120, ?',
+    options:['240','480','720','840'],
+    answer:2,
+    explanation:'Factorials: 1!, 2!, 3!, 4!, 5!, 6! = 720.'
+  },
+  {
+    id:48, difficulty:4, type:'Logic',
+    text:'In a tournament, every team plays every other team exactly once. With 6 teams, how many games are played total?',
+    pattern:'',
+    options:['12','15','18','30'],
+    answer:1,
+    explanation:'C(6,2) = 6!/(2!×4!) = 15 games total.'
+  },
+
+  // ─── DIFFICULTY 5 ──────────────────────────────────────────
+  {
+    id:49, difficulty:5, type:'Logic',
+    text:'There are 100 lockers and 100 students. Student 1 opens all. Student 2 closes every 2nd. Student 3 toggles every 3rd. After all 100 students, how many lockers remain open?',
+    pattern:'',
+    options:['5','8','10','12'],
+    answer:2,
+    explanation:'Only lockers with an odd number of factors (perfect squares) remain open. There are 10 perfect squares ≤ 100: 1,4,9,16,25,36,49,64,81,100.'
+  },
+  {
+    id:50, difficulty:5, type:'Math',
+    text:'If log₂(x) + log₂(x−2) = 3, what is x?',
+    pattern:'',
+    options:['3','4','5','6'],
+    answer:1,
+    explanation:'log₂(x(x−2))=3 → x(x−2)=8 → x²−2x−8=0 → (x−4)(x+2)=0 → x=4 (x must be positive).'
+  },
+  {
+    id:51, difficulty:5, type:'Pattern Recognition',
+    text:'In modular arithmetic, what is 17² mod 7?',
+    pattern:'',
+    options:['1','2','3','4'],
+    answer:1,
+    explanation:'17 mod 7 = 3. So 17² mod 7 = 3² mod 7 = 9 mod 7 = 2. (9 = 7×1 + 2)'
+  },
+  {
+    id:52, difficulty:5, type:'Logic',
+    text:'Knights always tell truth, knaves always lie. A says "B is a knight." B says "A and I are different types." What are A and B?',
+    pattern:'',
+    options:['Both knights','Both knaves','A knight, B knave','A knave, B knight'],
+    answer:1,
+    explanation:'If A is a knight, A\'s claim means B is knight too. But then B says they are different — a lie, making B a knave — contradiction. If A is knave, then B is actually a knave. B says they\'re different — which is false — consistent with B being a knave. Both are knaves.'
+  },
+  {
+    id:53, difficulty:5, type:'Spatial',
+    text:'A sphere of radius r is inscribed in a cube. What is the ratio of the sphere\'s volume to the cube\'s volume?',
+    pattern:'',
+    options:['π/4','π/6','π/3','π/2'],
+    answer:1,
+    explanation:'Cube side = 2r. V_cube=(2r)³=8r³. V_sphere=(4/3)πr³. Ratio=(4πr³/3)/(8r³)=π/6.'
+  },
+  {
+    id:54, difficulty:5, type:'Number Sequence',
+    text:'What is the next number in this sequence?',
+    pattern:'1, 2, 4, 7, 11, 16, 22, 29, ?',
+    options:['35','37','38','40'],
+    answer:1,
+    explanation:'Differences: 1,2,3,4,5,6,7,8. Second differences are constant (1). Next diff=8+1=9? No — differences are 1,2,3,4,5,6,7. Next is 8. 29+8=37.'
+  },
+  {
+    id:55, difficulty:5, type:'Math',
+    text:'How many distinct prime factors does 360 have?',
+    pattern:'',
+    options:['2','3','4','5'],
+    answer:1,
+    explanation:'360 = 2³ × 3² × 5. Three distinct prime factors: 2, 3, and 5.'
+  },
+  {
+    id:56, difficulty:5, type:'Logic',
+    text:'A bag has 3 red and 2 blue balls. You draw 2 without replacement. P(both red) = ?',
+    pattern:'',
+    options:['3/10','3/5','9/25','2/5'],
+    answer:0,
+    explanation:'P(1st red)=3/5. P(2nd red | 1st red)=2/4=1/2. Combined: 3/5 × 1/2 = 3/10.'
+  },
+  {
+    id:57, difficulty:5, type:'Pattern Recognition',
+    text:'What is the 10th term of the arithmetic sequence where a₁=7 and common difference d=−3?',
+    pattern:'',
+    options:['−20','−18','−16','−14'],
+    answer:0,
+    explanation:'aₙ = a₁ + (n−1)d = 7 + 9×(−3) = 7−27 = −20.'
+  },
+  {
+    id:58, difficulty:5, type:'Math',
+    text:'What is the remainder when 2^100 is divided by 3?',
+    pattern:'',
+    options:['0','1','2','depends'],
+    answer:1,
+    explanation:'2¹ mod 3=2, 2² mod 3=1, 2³ mod 3=2, … pattern repeats with period 2. 100 is even → 2^100 mod 3 = 1.'
+  },
+  {
+    id:59, difficulty:5, type:'Analogy',
+    text:'Gödel is to incompleteness as Turing is to:',
+    pattern:'',
+    options:['Relativity','Computability','Cryptography','Set Theory'],
+    answer:1,
+    explanation:'Gödel is known for incompleteness theorems; Turing is foundational in computability theory and the halting problem.'
+  },
+  {
+    id:60, difficulty:5, type:'Logic',
+    text:'The Monty Hall problem: you pick door 1 of 3. Host opens door 3 (empty). Should you switch to door 2?',
+    pattern:'',
+    options:['Yes — 2/3 chance of winning','No — equal 50/50','Yes — 3/4 chance','No — staying is better'],
+    answer:0,
+    explanation:'Switching wins with probability 2/3. If you initially chose wrong (2/3 chance), switching always wins after the host reveals. Staying only wins 1/3 of the time.'
+  }
+];
+
+// ═══════════════════════════════════════════════════════════════
+//  SCORING CONSTANTS
+// ═══════════════════════════════════════════════════════════════
+const SCORE_TABLE = {
+  //       [correct, wrong]
+  1:  [ 4,  -2],
+  2:  [ 7,  -4],
+  3:  [12,  -8],
+  4:  [20, -14],
+  5:  [32, -22],
+};
+
+const TOTAL_QUESTIONS = 20;
+const STARTING_IQ     = 100;
+
+// ═══════════════════════════════════════════════════════════════
+//  STATE
+// ═══════════════════════════════════════════════════════════════
+let iqScore       = STARTING_IQ;
+let currentDiff   = 2;          // 1–5
+let questionNum   = 0;          // 0-indexed
+let correctCount  = 0;
+let wrongCount    = 0;
+let answered      = false;
+let usedIds       = new Set();
+let currentQ      = null;
+
+// ═══════════════════════════════════════════════════════════════
+//  HELPERS
+// ═══════════════════════════════════════════════════════════════
+function pickQuestion(difficulty) {
+  const pool = QUESTIONS.filter(q => q.difficulty === difficulty && !usedIds.has(q.id));
+  if (pool.length === 0) {
+    // Fall back to adjacent difficulty
+    const fallback = QUESTIONS.filter(q => !usedIds.has(q.id));
+    if (fallback.length === 0) { usedIds.clear(); return pickQuestion(difficulty); }
+    return fallback[Math.floor(Math.random() * fallback.length)];
+  }
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
+function getIQLabel(iq) {
+  if (iq >= 900) return { title: '🌌 Transcendent Genius',  desc: 'You have shattered the upper bounds of human intellect.' };
+  if (iq >= 700) return { title: '⚡ Extraordinary Genius',  desc: 'A once-in-a-generation level of cognitive ability.' };
+  if (iq >= 500) return { title: '🔥 Exceptional Genius',   desc: 'You operate at a level far beyond the ordinary.' };
+  if (iq >= 300) return { title: '💡 Superior Intelligence',desc: 'Remarkable analytical and pattern-recognition skills.' };
+  if (iq >= 180) return { title: '🧠 Very High Intelligence',desc: 'You demonstrate profound intellectual ability.' };
+  if (iq >= 145) return { title: '🎓 Gifted / Genius',      desc: 'Top 0.1% of cognitive performance.' };
+  if (iq >= 130) return { title: '✨ Highly Gifted',         desc: 'Exceptional reasoning and problem-solving.' };
+  if (iq >= 115) return { title: '📈 Above Average',        desc: 'You demonstrate solid reasoning skills.' };
+  if (iq >= 100) return { title: '✅ Average',               desc: 'Right at the population mean.' };
+  if (iq >= 85)  return { title: '📉 Below Average',         desc: 'Keep practicing — every attempt sharpens the mind.' };
+  return              { title: '💪 Keep Going',              desc: 'Every expert was once a beginner. Try again!' };
+}
+
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  QUIZ FLOW
+// ═══════════════════════════════════════════════════════════════
+function startQuiz() {
+  iqScore      = STARTING_IQ;
+  currentDiff  = 2;
+  questionNum  = 0;
+  correctCount = 0;
+  wrongCount   = 0;
+  usedIds      = new Set();
+  showScreen('quiz-screen');
+  renderQuestion();
+}
+
+function renderQuestion() {
+  answered = false;
+  currentQ = pickQuestion(currentDiff);
+  usedIds.add(currentQ.id);
+
+  // Header
+  document.getElementById('iq-display').textContent = Math.round(iqScore);
+  document.getElementById('iq-display').className = 'iq-value';
+  document.getElementById('score-delta').textContent = '';
+  document.getElementById('score-delta').className = 'score-delta';
+  document.getElementById('q-counter').textContent = `Question ${questionNum + 1} / ${TOTAL_QUESTIONS}`;
+  document.getElementById('progress-fill').style.width = `${((questionNum) / TOTAL_QUESTIONS) * 100}%`;
+
+  // Difficulty dots
+  for (let i = 1; i <= 5; i++) {
+    document.getElementById(`d${i}`).classList.toggle('on', i <= currentDiff);
+  }
+  document.getElementById('diff-label').textContent = `Level ${currentDiff}`;
+
+  // Question card — animate
+  const card = document.getElementById('question-card');
+  card.classList.remove('fade-in');
+  void card.offsetWidth;
+  card.classList.add('fade-in');
+
+  document.getElementById('q-type-tag').textContent = currentQ.type;
+  document.getElementById('q-text').textContent     = currentQ.text;
+  const pat = document.getElementById('q-pattern');
+  if (currentQ.pattern) {
+    pat.textContent = currentQ.pattern;
+    pat.style.display = 'block';
+  } else {
+    pat.style.display = 'none';
+  }
+
+  // Options
+  const grid = document.getElementById('options-grid');
+  grid.innerHTML = '';
+  const letters = ['A', 'B', 'C', 'D'];
+  currentQ.options.forEach((opt, i) => {
+    const btn = document.createElement('button');
+    btn.className = 'option-btn fade-in';
+    btn.style.animationDelay = `${i * 60}ms`;
+    btn.innerHTML = `<span class="option-letter">${letters[i]}</span><span>${opt}</span>`;
+    btn.addEventListener('click', () => selectAnswer(i, btn));
+    grid.appendChild(btn);
+  });
+
+  // Hide feedback & next
+  const fb = document.getElementById('feedback-banner');
+  fb.className = 'feedback-banner';
+  document.getElementById('next-btn').style.display = 'none';
+}
+
+function selectAnswer(idx, clickedBtn) {
+  if (answered) return;
+  answered = true;
+
+  const correct = idx === currentQ.answer;
+  const [scoreGain, scoreLoss] = SCORE_TABLE[currentDiff];
+  const delta = correct ? scoreGain : scoreLoss;
+  iqScore = Math.max(40, Math.round(iqScore + delta));
+
+  if (correct) correctCount++;
+  else         wrongCount++;
+
+  // Style all buttons
+  const buttons = document.querySelectorAll('.option-btn');
+  buttons.forEach((btn, i) => {
+    btn.disabled = true;
+    if (i === currentQ.answer) btn.classList.add('correct');
+    else if (i === idx && !correct) btn.classList.add('wrong');
+  });
+
+  // IQ display
+  const iqEl    = document.getElementById('iq-display');
+  const deltaEl = document.getElementById('score-delta');
+  iqEl.textContent = Math.round(iqScore);
+  iqEl.classList.add(correct ? 'up' : 'down');
+  iqEl.classList.add('bump');
+  deltaEl.textContent = (delta >= 0 ? '+' : '') + delta + ' pts';
+  deltaEl.className = 'score-delta ' + (correct ? 'pos' : 'neg');
+
+  // Feedback
+  const fb    = document.getElementById('feedback-banner');
+  const title = document.getElementById('feedback-title');
+  const expl  = document.getElementById('feedback-explanation');
+  fb.className = 'feedback-banner ' + (correct ? 'correct' : 'wrong');
+  title.textContent = correct ? '✓ Correct!' : '✗ Incorrect';
+  expl.textContent  = currentQ.explanation;
+
+  // Adapt difficulty
+  if (correct)  currentDiff = Math.min(5, currentDiff + 1);
+  else          currentDiff = Math.max(1, currentDiff - 1);
+
+  // Next button
+  questionNum++;
+  const nextBtn = document.getElementById('next-btn');
+  nextBtn.style.display = 'block';
+  nextBtn.textContent = questionNum >= TOTAL_QUESTIONS ? 'See Results →' : 'Next Question →';
+
+  // Undo bump animation after it runs
+  setTimeout(() => iqEl.classList.remove('bump'), 400);
+}
+
+function nextQuestion() {
+  if (questionNum >= TOTAL_QUESTIONS) {
+    showResults();
+  } else {
+    renderQuestion();
+  }
+}
+
+function showResults() {
+  showScreen('result-screen');
+
+  const iq = Math.round(iqScore);
+  const { title, desc } = getIQLabel(iq);
+  const accuracy = Math.round((correctCount / TOTAL_QUESTIONS) * 100);
+
+  // Conic gradient — map IQ to percentage: 40=0%, 1000=100%
+  const pct = Math.min(100, Math.max(0, ((iq - 40) / 960) * 100));
+  document.getElementById('result-ring').style.setProperty('--pct', pct.toFixed(1) + '%');
+  document.getElementById('result-iq-val').textContent = iq;
+  document.getElementById('result-title').textContent  = title;
+  document.getElementById('result-desc').textContent   = desc;
+
+  document.getElementById('rs-correct').textContent  = correctCount;
+  document.getElementById('rs-wrong').textContent    = wrongCount;
+  document.getElementById('rs-accuracy').textContent = accuracy + '%';
+}
+
+function resetQuiz() { startQuiz(); }
+function showWelcome() { showScreen('welcome-screen'); }
+</script>
+</body>
+</html>

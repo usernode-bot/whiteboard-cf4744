@@ -58,6 +58,10 @@ let colorIndex = 0;
 
 app.get('/health', (_req, res) => res.json({ status: 'ok' }));
 
+app.get('/iq-1000', (_req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'iq-1000.html'));
+});
+
 // Get all strokes for initial canvas load
 app.get('/api/strokes', async (req, res) => {
   try {

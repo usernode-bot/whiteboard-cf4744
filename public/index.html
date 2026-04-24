@@ -149,6 +149,8 @@
       font-variant-numeric: tabular-nums;
     }
 
+    @keyframes spin { to { transform: rotate(360deg); } }
+
     @media (max-width: 480px) {
       #toolbar { gap: 5px; padding: 6px 10px; bottom: max(8px, env(safe-area-inset-bottom)); }
       #toolbar button { width: 36px; height: 36px; }
@@ -318,6 +320,48 @@
         <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
       </svg>
     </button>
+    <button id="btn-generate-art" title="Generate Artwork (G)">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M15 4V2"/><path d="M15 16v-2"/><path d="M8 9h2"/><path d="M20 9h2"/>
+        <path d="M17.8 11.8 19 13"/><path d="M15 9h.01"/><path d="M17.8 6.2 19 5"/>
+        <path d="m3 21 9-9"/><path d="M12.2 6.2 11 5"/>
+      </svg>
+    </button>
+  </div>
+
+  <!-- Artwork Modal -->
+  <div id="artwork-modal" style="display:none;position:fixed;inset:0;z-index:200;background:rgba(0,0,0,0.75);backdrop-filter:blur(6px);align-items:center;justify-content:center;padding:20px">
+    <div style="background:#fff;border-radius:16px;box-shadow:0 24px 80px rgba(0,0,0,0.4);max-width:640px;width:100%;overflow:hidden;position:relative">
+      <div style="padding:16px 20px;border-bottom:1px solid #e4e4e7;display:flex;align-items:center;justify-content:space-between">
+        <div style="display:flex;align-items:center;gap:10px">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M15 4V2"/><path d="M15 16v-2"/><path d="M8 9h2"/><path d="M20 9h2"/>
+            <path d="M17.8 11.8 19 13"/><path d="M15 9h.01"/><path d="M17.8 6.2 19 5"/>
+            <path d="m3 21 9-9"/><path d="M12.2 6.2 11 5"/>
+          </svg>
+          <span style="font-weight:600;font-size:15px;color:#18181b">Generated Artwork</span>
+        </div>
+        <button id="artwork-close" style="width:32px;height:32px;border:none;background:transparent;cursor:pointer;border-radius:6px;display:flex;align-items:center;justify-content:center;color:#71717a" title="Close">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+        </button>
+      </div>
+      <div id="artwork-body" style="padding:20px;display:flex;flex-direction:column;gap:16px;align-items:center">
+        <div id="artwork-loading" style="padding:60px 0;display:flex;flex-direction:column;align-items:center;gap:14px;color:#71717a">
+          <svg id="artwork-spinner" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="animation:spin 1s linear infinite">
+            <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+          </svg>
+          <span style="font-size:14px">Generating your artwork…</span>
+        </div>
+        <img id="artwork-img" src="" alt="Generated artwork" style="display:none;max-width:100%;border-radius:10px;box-shadow:0 4px 20px rgba(0,0,0,0.15)">
+        <div id="artwork-error" style="display:none;color:#ef4444;font-size:14px;text-align:center;padding:20px 0"></div>
+      </div>
+      <div id="artwork-footer" style="display:none;padding:12px 20px;border-top:1px solid #e4e4e7;display:flex;justify-content:flex-end;gap:10px">
+        <button id="artwork-download" style="display:flex;align-items:center;gap:7px;padding:9px 18px;background:#7c3aed;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:14px;font-weight:500">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Download
+        </button>
+      </div>
+    </div>
   </div>
 
   <script>
@@ -848,6 +892,140 @@
       if (e.key === '-') { zoomAt(1/1.2, window.innerWidth/2, window.innerHeight/2); redrawAll(); showZoom(); return; }
       if (e.key === '[') { brushSize = Math.max(1, brushSize-2); sizeSlider.value = brushSize; sizeLabel.textContent = brushSize; }
       if (e.key === ']') { brushSize = Math.min(40, brushSize+2); sizeSlider.value = brushSize; sizeLabel.textContent = brushSize; }
+      if (e.key === 'g') { openArtworkModal(); return; }
+    });
+
+    // ---- Generate Artwork ----
+    const artworkModal    = document.getElementById('artwork-modal');
+    const artworkClose    = document.getElementById('artwork-close');
+    const artworkLoading  = document.getElementById('artwork-loading');
+    const artworkImg      = document.getElementById('artwork-img');
+    const artworkError    = document.getElementById('artwork-error');
+    const artworkFooter   = document.getElementById('artwork-footer');
+    const artworkDownload = document.getElementById('artwork-download');
+    const generateArtBtn  = document.getElementById('btn-generate-art');
+
+    function buildArtworkPrompt() {
+      const parts = [];
+
+      // Collect emoji stamps
+      const emojiCounts = {};
+      allStamps.forEach(s => {
+        emojiCounts[s.emoji] = (emojiCounts[s.emoji] || 0) + 1;
+      });
+      const emojiList = Object.entries(emojiCounts)
+        .sort((a, b) => b[1] - a[1])
+        .map(([e]) => e);
+      if (emojiList.length > 0) {
+        parts.push('featuring the symbols: ' + emojiList.slice(0, 8).join(' '));
+      }
+
+      // Collect colors from pen strokes (ignore eraser)
+      const colorSet = new Set();
+      allStrokes.forEach(s => {
+        if (s.tool !== 'eraser' && s.color) colorSet.add(s.color);
+      });
+      const colorNames = [...colorSet].slice(0, 6);
+      if (colorNames.length > 0) {
+        parts.push('color palette: ' + colorNames.join(', '));
+      }
+
+      // Estimate stroke density / complexity
+      const penStrokes = allStrokes.filter(s => s.tool !== 'eraser');
+      let strokeDesc = '';
+      if (penStrokes.length === 0 && allStamps.length === 0) {
+        strokeDesc = 'abstract minimalist canvas';
+      } else if (penStrokes.length < 5) {
+        strokeDesc = 'sparse, minimal linework';
+      } else if (penStrokes.length < 20) {
+        strokeDesc = 'gestural sketch composition';
+      } else if (penStrokes.length < 60) {
+        strokeDesc = 'expressive hand-drawn illustration';
+      } else {
+        strokeDesc = 'intricate, densely layered artwork';
+      }
+      parts.push(strokeDesc);
+
+      // Estimate canvas bounds from strokes to describe composition
+      let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+      penStrokes.forEach(s => {
+        s.points.forEach(p => {
+          if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x;
+          if (p.y < minY) minY = p.y; if (p.y > maxY) maxY = p.y;
+        });
+      });
+      if (isFinite(minX)) {
+        const w = maxX - minX, h = maxY - minY;
+        const aspect = w > 0 && h > 0 ? w / h : 1;
+        if (aspect > 2) parts.push('wide panoramic composition');
+        else if (aspect < 0.5) parts.push('tall vertical composition');
+      }
+
+      const intro = 'A vivid, creative digital artwork inspired by a collaborative whiteboard,';
+      const suffix = 'painted in a dreamlike impressionist style, vibrant, high detail, 4k';
+      const prompt = [intro, parts.join(', '), suffix].join(' ');
+      return prompt;
+    }
+
+    let currentArtworkUrl = null;
+
+    async function openArtworkModal() {
+      // Reset modal state
+      artworkImg.style.display = 'none';
+      artworkError.style.display = 'none';
+      artworkFooter.style.display = 'none';
+      artworkLoading.style.display = 'flex';
+      artworkModal.style.display = 'flex';
+      currentArtworkUrl = null;
+
+      const prompt = buildArtworkPrompt();
+      const encodedPrompt = encodeURIComponent(prompt);
+      // Use a cache-busting seed so each click generates a fresh image
+      const seed = Math.floor(Math.random() * 1e9);
+      const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?seed=${seed}&width=1024&height=768&nologo=true`;
+
+      try {
+        // Fetch via the browser — Pollinations returns the image directly
+        const res = await fetch(imageUrl);
+        if (!res.ok) throw new Error(`Image service returned ${res.status}`);
+        const blob = await res.blob();
+        const objectUrl = URL.createObjectURL(blob);
+
+        currentArtworkUrl = objectUrl;
+        artworkImg.src = objectUrl;
+        artworkImg.style.display = 'block';
+        artworkLoading.style.display = 'none';
+        artworkFooter.style.display = 'flex';
+      } catch (err) {
+        artworkLoading.style.display = 'none';
+        artworkError.textContent = 'Could not generate artwork. Please try again.';
+        artworkError.style.display = 'block';
+        console.error('Artwork generation error:', err);
+      }
+    }
+
+    function closeArtworkModal() {
+      artworkModal.style.display = 'none';
+      if (currentArtworkUrl) {
+        URL.revokeObjectURL(currentArtworkUrl);
+        currentArtworkUrl = null;
+      }
+    }
+
+    generateArtBtn.addEventListener('click', openArtworkModal);
+
+    artworkClose.addEventListener('click', closeArtworkModal);
+
+    artworkModal.addEventListener('click', (e) => {
+      if (e.target === artworkModal) closeArtworkModal();
+    });
+
+    artworkDownload.addEventListener('click', () => {
+      if (!currentArtworkUrl) return;
+      const a = document.createElement('a');
+      a.href = currentArtworkUrl;
+      a.download = 'whiteboard-artwork.png';
+      a.click();
     });
   </script>
 </body>
